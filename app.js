@@ -4698,6 +4698,14 @@ var App={
         App.ui.toast(em,'error',{duration:9000,closeButton:true});
       },{silent:true});
     },
+    saveSettingsTab:function(tab){
+      var scope=String(tab||'').trim().toLowerCase();
+      if(scope==='shop-hours'){
+        App.admin.saveShopAvailability({silent:false});
+        return;
+      }
+      App.admin.saveSettings();
+    },
     saveSettings(){
       if(!App.admin.ensureCanEdit())return;
       var getVal=function(id){var el=document.getElementById(id);return el?el.value:'';};

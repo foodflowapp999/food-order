@@ -4698,13 +4698,130 @@ var App={
         App.ui.toast(em,'error',{duration:9000,closeButton:true});
       },{silent:true});
     },
+    _collectSettingsPayloadByTab:function(scope){
+      var getVal=function(id){var el=document.getElementById(id);return el?el.value:'';};
+      var getChecked=function(id){var el=document.getElementById(id);return !!(el&&el.checked);};
+      var payload={};
+      if(scope==='store'){
+        payload.restaurant_name=getVal('s-name');
+        payload.restaurant_logo=App.state._storeLogoB64||getVal('s-logo');
+        return payload;
+      }
+      if(scope==='order-info'){
+        var deliveryType=getVal('s-delivery-type-select')||getVal('s-delivery-type')||'village';
+        payload.departments=getVal('s-depts');
+        payload.delivery_category_type=deliveryType;
+        payload.delivery_note_mode=(String(deliveryType)==='village'?'address':'note');
+        return payload;
+      }
+      if(scope==='payment'){
+        var promptpayEnabled=getChecked('s-promptpay-enabled');
+        var cashEnabled=getChecked('s-cash-enabled');
+        var bankEnabled=getChecked('s-bank-enabled');
+        var promptpayNumber=App.u.digitsOnly(getVal('s-pp')||'');
+        if(!promptpayEnabled&&!cashEnabled&&!bankEnabled){
+          return {__error:'ต้องเปิดใช้งานการชำระเงินอย่างน้อย 1 วิธี'};
+        }
+        if(promptpayEnabled&&!promptpayNumber){
+          return {__error:'หากเปิดใช้ PromptPay กรุณากรอกเลข PromptPay'};
+        }
+        if(promptpayEnabled&&!App.u.isValidPromptPayId(promptpayNumber)){
+          return {__error:'เลข PromptPay ต้องเป็นมือถือ 10 หลัก หรือบัตรประชาชน 13 หลัก'};
+        }
+        var promptpayEl=document.getElementById('s-pp');if(promptpayEl)promptpayEl.value=promptpayNumber;
+        payload.promptpay=promptpayNumber;
+        payload.promptpay_enabled=promptpayEnabled?'1':'0';
+        payload.payee_name=getVal('s-payee');
+        payload.payment_timeout=getVal('s-timeout');
+        payload.cash_payment_enabled=cashEnabled?'1':'0';
+        payload.bank_payment_enabled=bankEnabled?'1':'0';
+        payload.slipok_api_key=getVal('s-slipok');
+        payload.slipok_branch_id=getVal('s-branch');
+        payload.payment_banks=JSON.stringify(App.state._banks||[]);
+        if(App.admin.isStaff()){
+          var raw=App.state._settingsRaw||{};
+          payload.slipok_api_key=String(raw.slipok_api_key||'');
+          payload.slipok_branch_id=String(raw.slipok_branch_id||'');
+        }
+        return payload;
+      }
+      if(scope==='drive'){
+        var driveEl=document.getElementById('s-drive');
+        var driveFolderId=driveEl?App.admin._normalizeGoogleDriveFolderInput(driveEl):'';
+        payload.drive_folder_id=driveFolderId;
+        return payload;
+      }
+      return null;
+    },
     saveSettingsTab:function(tab){
       var scope=String(tab||'').trim().toLowerCase();
       if(scope==='shop-hours'){
         App.admin.saveShopAvailability({silent:false});
         return;
       }
-      App.admin.saveSettings();
+      var btnMap={
+        store:'save-settings-store-btn',
+        'order-info':'save-settings-order-info-btn',
+        payment:'save-settings-payment-btn',
+        drive:'btn-create-drive-folder'
+      };
+      var successMap={
+        store:'✅ บันทึกข้อมูลร้านแล้ว',
+        'order-info':'✅ บันทึกข้อมูลลูกค้าแล้ว',
+        payment:'✅ บันทึกการชำระเงินแล้ว',
+        drive:'✅ บันทึกค่า Google Drive แล้ว'
+      };
+      var payload=App.admin._collectSettingsPayloadByTab(scope);
+      if(!payload){
+        App.ui.toast('ไม่รู้จักแท็บที่ต้องการบันทึก','error',{duration:6500,closeButton:true});
+        return;
+      }
+      if(payload.__error){
+        App.ui.toast(String(payload.__error||'ข้อมูลไม่ถูกต้อง'),'error',{duration:6500,closeButton:true});
+        return;
+      }
+      App.u.btnAction({
+        debounceKey:'save_settings_'+scope,debounceMs:1400,
+        btnId:btnMap[scope]||'save-settings-btn',loadingText:'⏳ กำลังบันทึก...',successText:'บันทึกแล้ว',
+        successMsg:successMap[scope]||'✅ บันทึกการตั้งค่าแล้ว',
+        onSuccess:function(){App.admin._invalidateCache(['settings','menu']);App.admin.loadSettings(true);}
+      },function(done){
+        var commitPayload=function(finalPayload){
+          App.api.call('saveSettings',[finalPayload,App.state.adminToken],function(res){
+            if(App.admin._auth(res))return;
+            if(res&&res.success&&scope==='store'){
+              App.state._storeLogoB64=null;
+              App.state._storeLogoSrcUrl=String(finalPayload.restaurant_logo||'');
+            }
+            done(res);
+          });
+        };
+        if(scope!=='store'){
+          commitPayload(payload);
+          return;
+        }
+        var logoRaw=String(payload.restaurant_logo||'');
+        var isDataLogo=(logoRaw.indexOf('data:image')===0);
+        if(!isDataLogo){
+          commitPayload(payload);
+          return;
+        }
+        var mimeType=logoRaw.split(';')[0].split(':')[1]||'image/jpeg';
+        var rawB64=logoRaw.split(',')[1]||'';
+        if(!rawB64){
+          done({success:false,message:'ข้อมูลโลโก้ไม่ถูกต้อง กรุณาเลือกไฟล์ใหม่'});
+          return;
+        }
+        App.ui.toast('⏳ กำลังอัปโหลดโลโก้ร้าน...','info');
+        App.api.call('uploadImageToDrive',[rawB64,'logo_'+Date.now()+'.jpg',mimeType,App.state.adminToken],function(upRes){
+          if(upRes&&upRes.success&&upRes.data&&upRes.data.url){
+            var nextPayload=Object.assign({},payload,{restaurant_logo:String(upRes.data.url||'')});
+            commitPayload(nextPayload);
+            return;
+          }
+          done(upRes||{success:false,message:'อัปโหลดโลโก้ไม่สำเร็จ'});
+        },{key:'logo_upload'});
+      });
     },
     saveSettings(){
       if(!App.admin.ensureCanEdit())return;

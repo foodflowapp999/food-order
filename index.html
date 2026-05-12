@@ -705,53 +705,10 @@
                 <button id="btn-copy-drive-id" class="btn btn-ghost" type="button" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.copyDriveFolderId()">คัดลอก Folder ID</button>
               </div>
               <span id="api-drive-status" class="text-sm text-muted">ยังไม่ได้ตรวจสอบ</span>
-              <div style="margin-top:10px">
-                <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 12px;font-size:12px" onclick="App.admin.toggleDriveAdvanced()">ขั้นสูง / Legacy</button>
+              <div class="form-group" style="margin-top:10px">
+                <label class="form-label">Folder ID (readonly)</label>
+                <input id="s-drive" type="text" class="form-input" readonly placeholder="ระบบจะบันทึกให้อัตโนมัติ">
               </div>
-              <div id="drive-advanced-panel" class="drive-advanced-panel">
-                <div class="form-group" style="margin-top:8px">
-                  <label class="form-label">Folder ID (ขั้นสูง - readonly)</label>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    <input id="s-drive" type="text" class="form-input" readonly placeholder="ระบบจะบันทึกให้อัตโนมัติ">
-                    <button id="btn-drive-manual-edit" class="btn btn-ghost" type="button" style="width:auto;padding:6px 12px;font-size:12px" onclick="App.admin.enableManualDriveFolderEdit()">แก้ไขเอง</button>
-                  </div>
-                </div>
-              </div>
-              <details class="drive-migrate-card drive-migrate-advanced" style="margin-top:12px">
-                <summary class="text-sm" style="font-weight:700;cursor:pointer">เครื่องมือย้ายรูปเดิม (Advanced)</summary>
-                <div class="text-sm" style="font-weight:700">ย้ายรูปเมนูเดิมเข้า Google Drive</div>
-                <div class="text-xs text-muted" style="line-height:1.5;margin-top:4px">
-                  ระบบจะคัดลอกรูปเมนูเดิมจาก Sheet/URL/Drive เดิม ไปยังโฟลเดอร์ Google Drive ใหม่ แล้วอัปเดตลิงก์รูปในเมนูให้อัตโนมัติ
-                </div>
-                <div class="text-xs text-muted" style="line-height:1.5;margin-top:4px">
-                  ระบบจะคัดลอกไฟล์ใหม่ ไม่ลบรูปเดิม และจะอัปเดตลิงก์รูปในเมนูให้เอง
-                </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-                  <button id="btn-migrate-menu-images" class="btn btn-secondary" style="display:none;width:auto;padding:8px 14px;font-size:13px" type="button" onclick="App.admin.migrateMenuImagesToDrive()">ย้ายรูปเมนูเดิมเข้า Drive</button>
-                  <button id="btn-backup-menu-images" class="btn btn-ghost" style="width:auto;padding:8px 14px;font-size:13px" type="button" onclick="App.admin.backupMenuBeforeImageMigration()">สำรองข้อมูลเมนูก่อนย้ายรูป</button>
-                  <button id="btn-verify-menu-images" class="btn btn-ghost" style="width:auto;padding:8px 14px;font-size:13px" type="button" onclick="App.admin.verifyMigratedMenuImages()">ตรวจสอบรูปเมนูหลังย้าย</button>
-                  <button id="btn-copy-migrate-report" class="btn btn-ghost" style="width:auto;padding:8px 14px;font-size:13px" type="button" onclick="App.admin.copyMenuImageMigrationReport()">คัดลอกรายงาน</button>
-                </div>
-                <div id="menu-image-migrate-status" style="display:none;margin-top:10px">
-                  <div class="drive-migrate-progress"><span id="menu-image-migrate-bar"></span></div>
-                  <div id="menu-image-migrate-text" class="text-xs text-muted" style="margin-top:6px"></div>
-                  <div id="menu-image-migrate-summary" class="text-xs text-muted" style="margin-top:4px"></div>
-                  <div id="menu-image-backup-status" class="text-xs text-muted" style="margin-top:4px"></div>
-                  <div id="menu-image-verify-summary" class="text-xs text-muted" style="margin-top:4px"></div>
-                  <details id="menu-image-migrate-failed-wrap" style="display:none;margin-top:8px">
-                    <summary class="text-xs" style="cursor:pointer">ดูรายการที่ย้ายไม่สำเร็จ</summary>
-                    <ul id="menu-image-migrate-failed-list" class="text-xs text-muted" style="margin:6px 0 0 16px"></ul>
-                  </details>
-                </div>
-                <details style="margin-top:10px" class="drive-danger-zone">
-                  <summary class="text-sm" style="cursor:pointer;color:#b91c1c;font-weight:700">ย้อนกลับลิงก์รูปเมนู (Danger Zone)</summary>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-                    <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px" type="button" onclick="App.admin.checkRollbackCandidates()">ตรวจสอบรายการที่ย้อนกลับได้</button>
-                    <button class="btn btn-danger" style="width:auto;padding:8px 14px;font-size:13px" type="button" onclick="App.admin.rollbackMenuImagesLatest()">ย้อนกลับรูปเมนูที่ย้ายล่าสุด</button>
-                  </div>
-                  <div id="menu-image-rollback-summary" class="text-xs text-muted" style="margin-top:8px"></div>
-                </details>
-              </details>
             </div>
           </div>
 
@@ -770,7 +727,6 @@
             </div>
           </div>
 
-          <button id="save-settings-btn" class="btn btn-primary" style="margin-top:8px;display:none" onclick="App.admin.saveSettings()">บันทึกการตั้งค่า</button>
         </div>
       </div>
 

@@ -309,6 +309,7 @@ select.form-input{appearance:none;-webkit-appearance:none;background-image:url("
 .kpi-val{font-size:24px;font-weight:700;line-height:1.2}
 .kpi-label{font-size:13px;color:var(--text2);margin-top:3px}
 .table-wrap{overflow-x:auto;background:#fff;border-radius:var(--radius);border:1px solid var(--border)}
+.logs-table-wrap{max-height:52vh;overflow-y:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{padding:12px 14px;text-align:left;background:var(--surface);font-weight:600;font-size:13px;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap}
 td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}

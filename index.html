@@ -666,28 +666,32 @@
                 <label class="form-label">วันเวลาเริ่มเปิด</label>
                 <div class="calendar-range-row">
                   <input id="s-open-start-date" type="text" class="form-input calendar-range-input" placeholder="เลือกวันที่เริ่ม" readonly onclick="App.admin.openDatePickerPopup('shop-hours','openStartDate')">
-                  <input id="s-open-start-time" type="time" class="form-input" style="max-width:130px" onchange="App.admin._syncShopHoursHidden()">
+                  <input id="s-open-start-time-display" type="text" class="form-input calendar-range-input" style="max-width:130px" placeholder="เลือกเวลา" readonly onclick="App.admin.openTimePickerPopup('shop-hours','openStartTime')">
                   <button class="btn btn-secondary calendar-range-btn" type="button" onclick="App.admin.openDatePickerPopup('shop-hours','openStartDate')">เลือกวันที่</button>
+                  <button class="btn btn-secondary calendar-range-btn" type="button" onclick="App.admin.openTimePickerPopup('shop-hours','openStartTime')">🕒 เลือกเวลา</button>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
                   <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('start','today')">วันนี้</button>
                   <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('start','tomorrow')">พรุ่งนี้</button>
                   <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('start','clear')">ล้างวันที่</button>
                 </div>
+                <input id="s-open-start-time" type="hidden">
                 <input id="s-open-start" type="hidden">
               </div>
               <div class="form-group">
                 <label class="form-label">วันเวลาสิ้นสุดการเปิด</label>
                 <div class="calendar-range-row">
                   <input id="s-open-end-date" type="text" class="form-input calendar-range-input" placeholder="เลือกวันที่สิ้นสุด" readonly onclick="App.admin.openDatePickerPopup('shop-hours','openEndDate')">
-                  <input id="s-open-end-time" type="time" class="form-input" style="max-width:130px" onchange="App.admin._syncShopHoursHidden()">
+                  <input id="s-open-end-time-display" type="text" class="form-input calendar-range-input" style="max-width:130px" placeholder="เลือกเวลา" readonly onclick="App.admin.openTimePickerPopup('shop-hours','openEndTime')">
                   <button class="btn btn-secondary calendar-range-btn" type="button" onclick="App.admin.openDatePickerPopup('shop-hours','openEndDate')">เลือกวันที่</button>
+                  <button class="btn btn-secondary calendar-range-btn" type="button" onclick="App.admin.openTimePickerPopup('shop-hours','openEndTime')">🕒 เลือกเวลา</button>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
                   <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('end','today')">วันนี้</button>
                   <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('end','tomorrow')">พรุ่งนี้</button>
                   <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('end','clear')">ล้างวันที่</button>
                 </div>
+                <input id="s-open-end-time" type="hidden">
                 <input id="s-open-end" type="hidden">
               </div>
               <p class="text-xs text-muted">ถ้าเว้นว่างทั้งสองช่อง จะใช้แค่สวิตช์เปิด/ปิดร้าน</p>
@@ -738,8 +742,8 @@
               <div class="section-header" style="margin-bottom:10px">
                 <h3 style="font-weight:700;font-size:15px">📝 Activity Logs</h3>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.loadActivityLogs(true)">รีเฟรช</button>
-                  <button class="btn btn-ghost" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.cleanupLogs()">ล้าง Logs เก่า</button>
+                  <button id="logs-refresh-btn" data-logs-search-btn="1" class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.loadActivityLogs(true)">รีเฟรช</button>
+                  <button id="logs-cleanup-btn" class="btn btn-ghost" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.cleanupLogs()">ล้าง Logs เก่า</button>
                 </div>
               </div>
               <div class="grid two" style="gap:8px;margin-bottom:10px">
@@ -789,8 +793,10 @@
                 <input id="logs-search" type="text" class="form-input" placeholder="ค้นหา module/action/message" oninput="App.admin.onLogsFilterInput()">
               </div>
               <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-                <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px" type="button" onclick="App.admin.loadActivityLogs(true)">ค้นหา</button>
+                <button id="logs-search-btn" data-logs-search-btn="1" class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px" type="button" onclick="App.admin.loadActivityLogs(true)">ค้นหา</button>
               </div>
+              <div id="logs-search-status" class="text-xs text-muted" style="min-height:18px;margin:-4px 0 8px"></div>
+              <div id="logs-last-loaded" class="text-xs text-muted" style="min-height:18px;margin:-6px 0 8px"></div>
               <div class="table-wrap logs-table-wrap">
                 <table>
                   <thead><tr><th>เวลา</th><th>level</th><th>module</th><th>action</th><th>status</th><th>message</th></tr></thead>
@@ -1322,6 +1328,34 @@
       <div class="admin-modal-footer">
         <button class="btn btn-ghost" style="flex:1" onclick="App.admin.closeDatePickerPopup()">ยกเลิก</button>
         <button class="btn btn-primary" style="flex:2" onclick="App.admin.applyDatePickerPopup()">ใช้งานช่วงวันที่นี้</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TIME PICKER POPUP -->
+  <div id="time-picker-popup" class="admin-modal" onclick="if(event.target===this)App.admin.closeTimePickerPopup()">
+    <div class="admin-modal-box time-popup-box" onclick="event.stopPropagation()" style="max-width:420px">
+      <div class="admin-modal-header">
+        <h3 id="tp-title">🕒 เลือกเวลา</h3>
+        <button class="btn-icon" onclick="App.admin.closeTimePickerPopup()">✕</button>
+      </div>
+      <div class="admin-modal-body" style="padding:14px 16px 10px">
+        <div class="time-popup-current">เวลาที่เลือก: <strong id="tp-current">--:--</strong></div>
+        <div class="time-popup-section-title">ชั่วโมง</div>
+        <div id="tp-hour-grid" class="time-popup-grid hour-grid"></div>
+        <div class="time-popup-section-title">นาที</div>
+        <div id="tp-minute-grid" class="time-popup-grid minute-grid"></div>
+        <div class="time-popup-quick">
+          <button class="btn btn-secondary time-quick-btn" type="button" onclick="App.admin.setTimePickerValue(8,0)">08:00</button>
+          <button class="btn btn-secondary time-quick-btn" type="button" onclick="App.admin.setTimePickerValue(12,0)">12:00</button>
+          <button class="btn btn-secondary time-quick-btn" type="button" onclick="App.admin.setTimePickerValue(17,0)">17:00</button>
+          <button class="btn btn-secondary time-quick-btn" type="button" onclick="App.admin.setTimePickerValue(20,0)">20:00</button>
+          <button class="btn btn-ghost time-quick-btn" type="button" onclick="App.admin.clearTimePickerValue()">ล้างเวลา</button>
+        </div>
+      </div>
+      <div class="admin-modal-footer">
+        <button class="btn btn-ghost" style="flex:1" onclick="App.admin.closeTimePickerPopup()">ยกเลิก</button>
+        <button class="btn btn-primary" style="flex:2" onclick="App.admin.applyTimePickerPopup()">ตกลง</button>
       </div>
     </div>
   </div>

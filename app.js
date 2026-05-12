@@ -1833,12 +1833,6 @@ var App={
         App.admin.refreshDriveStatus();
       }
       if(tabId==='stab-logs'){
-        var now=Date.now();
-        var last=App.admin._lastLogsCleanupAt||0;
-        if(now-last>10*60*1000){
-          App.admin._lastLogsCleanupAt=now;
-          App.api.call('cleanupLogs',[App.state.adminToken],function(){},{silent:true,noLoader:true});
-        }
         App.admin.loadActivityLogs(true);
       }
     },
@@ -4321,12 +4315,16 @@ var App={
         var edt=splitDateTime(endLocal);
         var sd=document.getElementById('s-open-start-date');
         var st=document.getElementById('s-open-start-time');
+        var std=document.getElementById('s-open-start-time-display');
         var ed=document.getElementById('s-open-end-date');
         var et=document.getElementById('s-open-end-time');
+        var etd=document.getElementById('s-open-end-time-display');
         if(sd){sd.dataset.ymd=sdt.date;sd.value=App.admin._fmtYmdThai(sdt.date);}
         if(st)st.value=sdt.time||'';
+        if(std)std.value=sdt.time||'';
         if(ed){ed.dataset.ymd=edt.date;ed.value=App.admin._fmtYmdThai(edt.date);}
         if(et)et.value=edt.time||'';
+        if(etd)etd.value=edt.time||'';
         App.admin._renderShopHoursPreview();
         // PERF-FIX: users/logs are lazy-loaded on tab open
         App.admin._toggleCustomPaperField('ps-paper','ps-paper-custom-wrap');
@@ -4656,7 +4654,44 @@ var App={
         App.admin._setNotifyStatus('line-test-status','✅ ดึง Group ID ล่าสุดสำเร็จและเติม Target ID แล้ว','success');
       },{silent:true});
     },
-    _logsState:{page:1,pageSize:30,hasMore:false,loading:false,items:[]},
+    _logsState:{page:1,pageSize:30,hasMore:false,loading:false,items:[],hintTimer:null,warnTimer:null},
+    _setLogsSearchUiLoading:function(loading){
+      var buttons=document.querySelectorAll('[data-logs-search-btn="1"]');
+      buttons.forEach(function(btn){
+        if(!btn)return;
+        if(!btn.dataset.defaultText)btn.dataset.defaultText=String(btn.textContent||'ค้นหา');
+        btn.disabled=!!loading;
+        btn.textContent=loading?(btn.id==='logs-refresh-btn'?'กำลังโหลด...':'กำลังค้นหา...'):String(btn.dataset.defaultText||'ค้นหา');
+      });
+    },
+    setLogsLoading:function(isLoading,message){
+      var tb=document.getElementById('activity-log-table');
+      if(tb&&isLoading){
+        tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text2)">'+App.u.esc(String(message||'กำลังค้นหา Logs...'))+'</td></tr>';
+      }
+      App.admin._setLogsSearchUiLoading(!!isLoading);
+      var moreBtn=document.getElementById('logs-load-more-btn');
+      if(moreBtn)moreBtn.disabled=!!isLoading;
+    },
+    _setLogsSearchStatus:function(msg,type){
+      var el=document.getElementById('logs-search-status');
+      if(!el)return;
+      el.textContent=String(msg||'');
+      el.style.color=(type==='warn')?'#f59e0b':'var(--text2)';
+    },
+    _renderLogsLoadingRow:function(msg){
+      var tb=document.getElementById('activity-log-table');if(!tb)return;
+      tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text2)">'+App.u.esc(msg||'กำลังค้นหา Logs...')+'</td></tr>';
+    },
+    _setLogsLastLoaded:function(prefix){
+      var el=document.getElementById('logs-last-loaded');
+      if(!el)return;
+      var now=new Date();
+      var hh=String(now.getHours()).padStart(2,'0');
+      var mm=String(now.getMinutes()).padStart(2,'0');
+      var ss=String(now.getSeconds()).padStart(2,'0');
+      el.textContent=(prefix?String(prefix).trim()+' • ':'')+'โหลดล่าสุด: '+hh+':'+mm+':'+ss;
+    },
     _getLogsFilters:function(){
       var getVal=function(id){var el=document.getElementById(id);return el?String(el.value||'').trim():'';};
       return {
@@ -4710,26 +4745,51 @@ var App={
     },
     cleanupLogs:function(){
       if(!App.admin.ensureCanEdit())return;
-      App.api.call('cleanupLogs',[App.state.adminToken],function(res){
-        if(App.admin._auth(res))return;
-        if(!res||!res.success){
-          App.ui.toast((res&&res.message)||'ล้าง Logs ไม่สำเร็จ','error',{duration:6500,closeButton:true});
-          return;
-        }
-        var deleted=(res.data&&res.data.deleted)||0;
-        App.ui.toast('ล้าง Logs เก่าแล้ว '+deleted+' รายการ','success',{duration:1800});
-        App.admin.loadActivityLogs(true);
-      },{silent:true,noLoader:true});
+      App.ui.confirm('ต้องการล้าง Logs เก่าหรือไม่? ระบบจะลบเฉพาะ Logs ปกติที่เก่ากว่า 7 วัน ไม่ลบ Logs ล่าสุด',function(ok){
+        if(!ok)return;
+        var cleanBtn=document.getElementById('logs-cleanup-btn');
+        if(cleanBtn)App.ui.setBtn(cleanBtn,true,'กำลังล้าง...');
+        App.admin.setLogsLoading(true,'กำลังล้าง Logs เก่า...');
+        App.admin._setLogsSearchStatus('กำลังล้าง Logs เก่า...','info');
+        App.api.call('cleanupLogs',[App.state.adminToken],function(res){
+          if(cleanBtn)App.ui.setBtn(cleanBtn,false,'ล้าง Logs เก่า');
+          if(App.admin._auth(res)){App.admin.setLogsLoading(false);return;}
+          if(!res||!res.success){
+            App.admin.setLogsLoading(false);
+            App.ui.toast((res&&res.message)||'ล้าง Logs ไม่สำเร็จ','error',{duration:6500,closeButton:true});
+            return;
+          }
+          var deleted=(res.data&&res.data.deleted)||0;
+          App.ui.toast('ล้าง Logs เก่าแล้ว '+deleted+' รายการ','success',{duration:1800});
+          App.admin._setLogsSearchStatus('ล้าง Logs เก่าแล้ว '+deleted+' รายการ','info');
+          App.admin._setLogsLastLoaded('ล้างข้อมูลแล้ว');
+          App.admin.loadActivityLogs(true);
+        },{silent:true,noLoader:true});
+      },{okText:'ล้าง Logs เก่า',cancelText:'ยกเลิก'});
     },
     _fetchLogsPage:function(reset){
       var st=App.admin._logsState||{};
       if(st.loading)return;
       st.loading=true;
+      if(st.hintTimer)clearTimeout(st.hintTimer);
+      if(st.warnTimer)clearTimeout(st.warnTimer);
+      App.admin.setLogsLoading(true,reset?'กำลังค้นหา Logs...':'กำลังโหลด Logs เพิ่ม...');
+      App.admin._setLogsSearchStatus('', '');
+      st.hintTimer=setTimeout(function(){
+        if(st.loading)App.admin._setLogsSearchStatus('กำลังค้นหา Logs หากข้อมูลเยอะอาจใช้เวลาสักครู่','info');
+      },3000);
+      st.warnTimer=setTimeout(function(){
+        if(st.loading)App.admin._setLogsSearchStatus('ค้นหานานกว่าปกติ แนะนำลดช่วงวันที่หรือเพิ่มตัวกรอง','warn');
+      },10000);
       var btn=document.getElementById('logs-load-more-btn');
       if(btn)App.ui.setBtn(btn,true,'⏳ กำลังโหลด...');
       var filters=App.admin._getLogsFilters();
       App.api.call('getLogs',[Object.assign({},filters,{page:st.page||1,pageSize:st.pageSize||30}),App.state.adminToken],function(res){
         st.loading=false;
+        if(st.hintTimer)clearTimeout(st.hintTimer);
+        if(st.warnTimer)clearTimeout(st.warnTimer);
+        App.admin.setLogsLoading(false);
+        App.admin._setLogsSearchStatus('', '');
         if(btn)App.ui.setBtn(btn,false,'โหลดเพิ่ม');
         if(App.admin._auth(res))return;
         if(!res||!res.success){
@@ -4742,6 +4802,7 @@ var App={
         st.page=parseInt(data.page||st.page||1,10)||1;
         st.items=reset?items:(st.items||[]).concat(items);
         App.admin._renderActivityLogs(st.items);
+        App.admin._setLogsLastLoaded('รีเฟรชแล้ว');
         if(btn)btn.style.display=st.hasMore?'':'none';
       },{silent:true,noLoader:true,key:'logs_lite'});
     },
@@ -4765,7 +4826,7 @@ var App={
     },
     _renderActivityLogs:function(logs){
       var tb=document.getElementById('activity-log-table');if(!tb)return;
-      if(!logs||!logs.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text2)">ยังไม่มีข้อมูล</td></tr>';return;}
+      if(!logs||!logs.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text2)">ไม่พบ Logs</td></tr>';return;}
       var e=App.u.esc;
       var levelClass=function(level){
         var l=String(level||'').toUpperCase();
@@ -5100,6 +5161,20 @@ var App={
         var tm=String((tEl&&tEl.value)||'').trim();
         hEl.value=(ymd&&tm)?(ymd+'T'+tm):'';
       };
+      var startDateEl=document.getElementById('s-open-start-date');
+      var endDateEl=document.getElementById('s-open-end-date');
+      var startTimeEl=document.getElementById('s-open-start-time');
+      var endTimeEl=document.getElementById('s-open-end-time');
+      if(startDateEl&&String(startDateEl.dataset.ymd||'').trim()&&!String(startTimeEl&&startTimeEl.value||'').trim()&&startTimeEl){
+        startTimeEl.value='08:00';
+      }
+      if(endDateEl&&String(endDateEl.dataset.ymd||'').trim()&&!String(endTimeEl&&endTimeEl.value||'').trim()&&endTimeEl){
+        endTimeEl.value='17:00';
+      }
+      var startTimeDisplay=document.getElementById('s-open-start-time-display');
+      var endTimeDisplay=document.getElementById('s-open-end-time-display');
+      if(startTimeDisplay)startTimeDisplay.value=String(startTimeEl&&startTimeEl.value||'').trim()||'';
+      if(endTimeDisplay)endTimeDisplay.value=String(endTimeEl&&endTimeEl.value||'').trim()||'';
       join('s-open-start-date','s-open-start-time','s-open-start');
       join('s-open-end-date','s-open-end-time','s-open-end');
       App.admin._renderShopHoursPreview();
@@ -5115,6 +5190,8 @@ var App={
         var ymd=App.admin._dateToYmd(d);
         dEl.dataset.ymd=ymd;
         dEl.value=App.admin._fmtYmdThai(ymd);
+        var tEl=(which==='end')?document.getElementById('s-open-end-time'):document.getElementById('s-open-start-time');
+        if(tEl&&!String(tEl.value||'').trim())tEl.value=(which==='end'?'17:00':'08:00');
       }
       App.admin._syncShopHoursHidden();
     },
@@ -5264,7 +5341,7 @@ var App={
     },
 
     // ─── ORDERS PAGE ──────────────────────────────────────────
-    _ordersData:[],_ordersFilter:'all',_ordersFilterDept:'all',_ordersFilterDate:'all',_ordersDateFrom:'',_ordersDateTo:'',_ordersAutoTimer:null,_ordersRetry:0,_ordersSearch:'',_ordersSearchTimer:null,_ordersFp:'',_ordersViewCache:{key:'',data:null},_ordersDeptSig:'',_ordersPollingBusy:false,_ordersRefreshBusy:false,_ordersSoundEnabled:true,_ordersNewFlashIds:{},_logsDateFrom:'',_logsDateTo:'',_datePickerState:{context:'orders',target:'from',month:0,year:0,from:'',to:''},
+    _ordersData:[],_ordersFilter:'all',_ordersFilterDept:'all',_ordersFilterDate:'all',_ordersDateFrom:'',_ordersDateTo:'',_ordersAutoTimer:null,_ordersRetry:0,_ordersSearch:'',_ordersSearchTimer:null,_ordersFp:'',_ordersViewCache:{key:'',data:null},_ordersDeptSig:'',_ordersPollingBusy:false,_ordersRefreshBusy:false,_ordersSoundEnabled:true,_ordersNewFlashIds:{},_logsDateFrom:'',_logsDateTo:'',_datePickerState:{context:'orders',target:'from',month:0,year:0,from:'',to:''},_timePickerState:{context:'shop-hours',field:'openStartTime',hour:-1,minute:-1},
     _syncOrdersSoundToggle:function(){
       try{
         var raw=localStorage.getItem('fo_admin_new_order_sound_v1');
@@ -5672,6 +5749,82 @@ var App={
     closeDatePickerPopup:function(){
       var pop=document.getElementById('date-picker-popup');
       if(pop)pop.classList.remove('active');
+    },
+    openTimePickerPopup:function(context,field){
+      var ctx=(context==='shop-hours')?'shop-hours':'shop-hours';
+      var f=(field==='openEndTime')?'openEndTime':'openStartTime';
+      var st=App.admin._timePickerState||{};
+      st.context=ctx;
+      st.field=f;
+      var sourceId=(f==='openEndTime')?'s-open-end-time':'s-open-start-time';
+      var cur=String((document.getElementById(sourceId)&&document.getElementById(sourceId).value)||'').trim();
+      if(!/^\d{2}:\d{2}$/.test(cur))cur=(f==='openEndTime'?'17:00':'08:00');
+      st.hour=parseInt(cur.split(':')[0],10);
+      st.minute=parseInt(cur.split(':')[1],10);
+      App.admin._timePickerState=st;
+      var titleEl=document.getElementById('tp-title');
+      if(titleEl)titleEl.textContent=(f==='openEndTime'?'🕒 เลือกเวลาปิดร้าน':'🕒 เลือกเวลาเปิดร้าน');
+      var pop=document.getElementById('time-picker-popup');
+      if(pop)pop.classList.add('active');
+      App.admin._renderTimePickerPopup();
+    },
+    closeTimePickerPopup:function(){
+      var pop=document.getElementById('time-picker-popup');
+      if(pop)pop.classList.remove('active');
+    },
+    setTimePickerValue:function(hour,minute){
+      var st=App.admin._timePickerState||{};
+      var h=Math.max(0,Math.min(23,parseInt(hour,10)||0));
+      var m=Math.max(0,Math.min(59,parseInt(minute,10)||0));
+      st.hour=h;st.minute=m;
+      App.admin._timePickerState=st;
+      App.admin._renderTimePickerPopup();
+    },
+    clearTimePickerValue:function(){
+      var st=App.admin._timePickerState||{};
+      st.hour=-1;st.minute=-1;
+      App.admin._timePickerState=st;
+      App.admin._renderTimePickerPopup();
+    },
+    _renderTimePickerPopup:function(){
+      var st=App.admin._timePickerState||{};
+      var hh=parseInt(st.hour,10),mm=parseInt(st.minute,10);
+      var curEl=document.getElementById('tp-current');
+      if(curEl)curEl.textContent=(hh>=0&&mm>=0)?(String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0')):'--:--';
+      var hourGrid=document.getElementById('tp-hour-grid');
+      var minuteGrid=document.getElementById('tp-minute-grid');
+      if(hourGrid){
+        var hhtml='';
+        for(var h=0;h<24;h++){
+          var hs=String(h).padStart(2,'0');
+          hhtml+='<button type="button" class="time-chip'+(h===hh?' active':'')+'" onclick="App.admin.setTimePickerValue('+h+','+(mm>=0?mm:0)+')">'+hs+'</button>';
+        }
+        hourGrid.innerHTML=hhtml;
+      }
+      if(minuteGrid){
+        var mhtml='';
+        var mins=[0,5,10,15,20,25,30,35,40,45,50,55];
+        mins.forEach(function(m){
+          var ms=String(m).padStart(2,'0');
+          mhtml+='<button type="button" class="time-chip'+(m===mm?' active':'')+'" onclick="App.admin.setTimePickerValue('+(hh>=0?hh:8)+','+m+')">'+ms+'</button>';
+        });
+        minuteGrid.innerHTML=mhtml;
+      }
+    },
+    applyTimePickerPopup:function(){
+      var st=App.admin._timePickerState||{};
+      var field=String(st.field||'openStartTime');
+      var targetId=(field==='openEndTime')?'s-open-end-time':'s-open-start-time';
+      var tEl=document.getElementById(targetId);
+      if(tEl){
+        if(parseInt(st.hour,10)>=0&&parseInt(st.minute,10)>=0){
+          tEl.value=String(parseInt(st.hour,10)).padStart(2,'0')+':'+String(parseInt(st.minute,10)).padStart(2,'0');
+        }else{
+          tEl.value='';
+        }
+      }
+      App.admin._syncShopHoursHidden();
+      App.admin.closeTimePickerPopup();
     },
     setDatePickerTarget:function(target){
       var st=App.admin._datePickerState||{};

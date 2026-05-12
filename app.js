@@ -4307,8 +4307,26 @@ var App={
         var tog=document.getElementById('shop-open-toggle');if(tog)tog.checked=isOpen;
         App.admin.renderShopStatus(isOpen);
         var range={};try{range=JSON.parse(s.shop_open_range||'{}');}catch(_){range={};}
-        setVal('s-open-start',App.admin._toDateTimeLocal(range.start||''));
-        setVal('s-open-end',App.admin._toDateTimeLocal(range.end||''));
+        var startLocal=App.admin._toDateTimeLocal(range.start||'');
+        var endLocal=App.admin._toDateTimeLocal(range.end||'');
+        setVal('s-open-start',startLocal);
+        setVal('s-open-end',endLocal);
+        var splitDateTime=function(v){
+          var s=String(v||'').trim();
+          if(!s)return {date:'',time:''};
+          var p=s.split('T');
+          return {date:p[0]||'',time:(p[1]||'').slice(0,5)};
+        };
+        var sdt=splitDateTime(startLocal);
+        var edt=splitDateTime(endLocal);
+        var sd=document.getElementById('s-open-start-date');
+        var st=document.getElementById('s-open-start-time');
+        var ed=document.getElementById('s-open-end-date');
+        var et=document.getElementById('s-open-end-time');
+        if(sd){sd.dataset.ymd=sdt.date;sd.value=App.admin._fmtYmdThai(sdt.date);}
+        if(st)st.value=sdt.time||'';
+        if(ed){ed.dataset.ymd=edt.date;ed.value=App.admin._fmtYmdThai(edt.date);}
+        if(et)et.value=edt.time||'';
         App.admin._renderShopHoursPreview();
         // PERF-FIX: users/logs are lazy-loaded on tab open
         App.admin._toggleCustomPaperField('ps-paper','ps-paper-custom-wrap');
@@ -4642,19 +4660,39 @@ var App={
     _getLogsFilters:function(){
       var getVal=function(id){var el=document.getElementById(id);return el?String(el.value||'').trim():'';};
       return {
-        dateFrom:getVal('logs-date-from'),
-        dateTo:getVal('logs-date-to'),
+        dateFrom:String(App.admin._logsDateFrom||'').trim(),
+        dateTo:String(App.admin._logsDateTo||'').trim(),
         module:getVal('logs-module'),
         level:getVal('logs-level'),
         status:getVal('logs-status'),
         search:getVal('logs-search')
       };
     },
+    quickPickLogsDateRange:function(type){
+      var now=new Date();
+      now.setHours(0,0,0,0);
+      if(type==='clear'){
+        App.admin._logsDateFrom='';
+        App.admin._logsDateTo='';
+      }else if(type==='today'){
+        var t=App.admin._dateToYmd(now);
+        App.admin._logsDateFrom=t;App.admin._logsDateTo=t;
+      }else{
+        var d=parseInt(type,10)||7;
+        var from=new Date(now.getTime());
+        from.setDate(from.getDate()-(d-1));
+        App.admin._logsDateFrom=App.admin._dateToYmd(from);
+        App.admin._logsDateTo=App.admin._dateToYmd(now);
+      }
+      App.admin._syncDateInputs('logs');
+      App.admin._renderLogsDatePreview();
+      App.admin.loadActivityLogs(true);
+    },
     _renderLogsDatePreview:function(){
       var out=document.getElementById('logs-date-preview');
       if(!out)return;
-      var from=String((document.getElementById('logs-date-from')&&document.getElementById('logs-date-from').value)||'').trim();
-      var to=String((document.getElementById('logs-date-to')&&document.getElementById('logs-date-to').value)||'').trim();
+      var from=String(App.admin._logsDateFrom||'').trim();
+      var to=String(App.admin._logsDateTo||'').trim();
       if(!from&&!to){out.textContent='ช่วงวันที่: ทั้งหมด';return;}
       if(from&&to){out.textContent='ช่วงวันที่: '+App.u.formatDateTH(from)+' ถึง '+App.u.formatDateTH(to);return;}
       if(from){out.textContent='ช่วงวันที่: ตั้งแต่ '+App.u.formatDateTH(from);return;}
@@ -4708,6 +4746,7 @@ var App={
       },{silent:true,noLoader:true,key:'logs_lite'});
     },
     loadActivityLogs:function(force){
+      App.admin._syncDateInputs('logs');
       App.admin._renderLogsDatePreview();
       var st=App.admin._logsState||{};
       if(force){
@@ -4939,6 +4978,7 @@ var App={
     },
     saveSettings(){
       if(!App.admin.ensureCanEdit())return;
+      App.admin._syncShopHoursHidden();
       var getVal=function(id){var el=document.getElementById(id);return el?el.value:'';};
       var openStart=getVal('s-open-start'),openEnd=getVal('s-open-end');
       if((openStart&&!openEnd)||(!openStart&&openEnd)){App.ui.toast('กรุณาระบุช่วงเวลาเปิดให้ครบทั้งเริ่มและสิ้นสุด','error');return;}
@@ -5006,6 +5046,7 @@ var App={
     },
     saveShopAvailability:function(opts){
       opts=opts||{};
+      App.admin._syncShopHoursHidden();
       if(App.admin.isReadOnly()){
         if(!res||!res.success){App.ui.toast((res&&res.message)||'ยืนยันรับเงินสดไม่สำเร็จ','warn');return;}
         return;
@@ -5048,6 +5089,34 @@ var App={
       // เปลี่ยนเฉพาะสถานะในฟอร์มก่อน และจะบันทึกจริงเมื่อกดปุ่ม "บันทึกการตั้งค่า"
       App.admin.renderShopStatus(checked);
       App.admin._renderShopHoursPreview();
+    },
+    _syncShopHoursHidden:function(){
+      var join=function(dateElId,timeElId,hiddenId){
+        var dEl=document.getElementById(dateElId);
+        var tEl=document.getElementById(timeElId);
+        var hEl=document.getElementById(hiddenId);
+        if(!hEl)return;
+        var ymd=String((dEl&&dEl.dataset&&dEl.dataset.ymd)||'').trim();
+        var tm=String((tEl&&tEl.value)||'').trim();
+        hEl.value=(ymd&&tm)?(ymd+'T'+tm):'';
+      };
+      join('s-open-start-date','s-open-start-time','s-open-start');
+      join('s-open-end-date','s-open-end-time','s-open-end');
+      App.admin._renderShopHoursPreview();
+    },
+    quickSetShopHoursDate:function(which,mode){
+      var dEl=(which==='end')?document.getElementById('s-open-end-date'):document.getElementById('s-open-start-date');
+      if(!dEl)return;
+      if(mode==='clear'){
+        dEl.dataset.ymd='';dEl.value='';
+      }else{
+        var d=new Date();d.setHours(0,0,0,0);
+        if(mode==='tomorrow')d.setDate(d.getDate()+1);
+        var ymd=App.admin._dateToYmd(d);
+        dEl.dataset.ymd=ymd;
+        dEl.value=App.admin._fmtYmdThai(ymd);
+      }
+      App.admin._syncShopHoursHidden();
     },
     _renderShopHoursPreview:function(){
       var startEl=document.getElementById('s-open-start');
@@ -5195,7 +5264,7 @@ var App={
     },
 
     // ─── ORDERS PAGE ──────────────────────────────────────────
-    _ordersData:[],_ordersFilter:'all',_ordersFilterDept:'all',_ordersFilterDate:'all',_ordersDateFrom:'',_ordersDateTo:'',_ordersAutoTimer:null,_ordersRetry:0,_ordersSearch:'',_ordersSearchTimer:null,_ordersFp:'',_ordersViewCache:{key:'',data:null},_ordersDeptSig:'',_ordersPollingBusy:false,_ordersRefreshBusy:false,_ordersSoundEnabled:true,_ordersNewFlashIds:{},_datePickerState:{context:'orders',target:'from',month:0,year:0,from:'',to:''},
+    _ordersData:[],_ordersFilter:'all',_ordersFilterDept:'all',_ordersFilterDate:'all',_ordersDateFrom:'',_ordersDateTo:'',_ordersAutoTimer:null,_ordersRetry:0,_ordersSearch:'',_ordersSearchTimer:null,_ordersFp:'',_ordersViewCache:{key:'',data:null},_ordersDeptSig:'',_ordersPollingBusy:false,_ordersRefreshBusy:false,_ordersSoundEnabled:true,_ordersNewFlashIds:{},_logsDateFrom:'',_logsDateTo:'',_datePickerState:{context:'orders',target:'from',month:0,year:0,from:'',to:''},
     _syncOrdersSoundToggle:function(){
       try{
         var raw=localStorage.getItem('fo_admin_new_order_sound_v1');
@@ -5556,6 +5625,11 @@ var App={
         var ot=document.getElementById('orders-date-to');
         if(of)of.value=String(App.admin._ordersDateFrom||'');
         if(ot)ot.value=String(App.admin._ordersDateTo||'');
+      }else if(context==='logs'){
+        var lf=document.getElementById('logs-date-from');
+        var lt=document.getElementById('logs-date-to');
+        if(lf)lf.value=App.admin._fmtYmdThai(String(App.admin._logsDateFrom||''));
+        if(lt)lt.value=App.admin._fmtYmdThai(String(App.admin._logsDateTo||''));
       }else{
         var bf=document.getElementById('bp-date-from');
         var bt=document.getElementById('bp-date-to');
@@ -5564,21 +5638,29 @@ var App={
       }
     },
     openDatePickerPopup:function(context,target){
-      var ctx=(context==='batch')?'batch':'orders';
-      var tg=(target==='to')?'to':'from';
+      var ctx=(context==='batch'||context==='logs'||context==='shop-hours')?context:'orders';
+      var tg=(target==='to'||target==='openEndDate')?target:'from';
+      if(tg!=='from'&&tg!=='to'&&tg!=='openStartDate'&&tg!=='openEndDate')tg='from';
       var st=App.admin._datePickerState||{};
       st.context=ctx;
       st.target=tg;
       if(ctx==='orders'){
         st.from=String(App.admin._ordersDateFrom||'').trim();
         st.to=String(App.admin._ordersDateTo||'').trim();
+      }else if(ctx==='logs'){
+        st.from=String(App.admin._logsDateFrom||'').trim();
+        st.to=String(App.admin._logsDateTo||'').trim();
+      }else if(ctx==='shop-hours'){
+        st.from=String((document.getElementById('s-open-start-date')&&document.getElementById('s-open-start-date').dataset.ymd)||'').trim();
+        st.to=String((document.getElementById('s-open-end-date')&&document.getElementById('s-open-end-date').dataset.ymd)||'').trim();
       }else{
         var bf=document.getElementById('bp-date-from');
         var bt=document.getElementById('bp-date-to');
         st.from=String(bf&&bf.value||'').trim();
         st.to=String(bt&&bt.value||'').trim();
       }
-      var base=App.admin._ymdToDate(st[tg])||App.admin._ymdToDate(st.from)||App.admin._ymdToDate(st.to)||new Date();
+      var baseKey=(tg==='openEndDate')?'to':'from';
+      var base=App.admin._ymdToDate(st[baseKey])||App.admin._ymdToDate(st.from)||App.admin._ymdToDate(st.to)||new Date();
       st.month=base.getMonth();
       st.year=base.getFullYear();
       App.admin._datePickerState=st;
@@ -5593,12 +5675,12 @@ var App={
     },
     setDatePickerTarget:function(target){
       var st=App.admin._datePickerState||{};
-      st.target=(target==='to')?'to':'from';
+      st.target=(target==='to'||target==='openEndDate')?target:'from';
       App.admin._datePickerState=st;
       var f=document.getElementById('dp-tab-from');
       var t=document.getElementById('dp-tab-to');
-      if(f)f.classList.toggle('active',st.target==='from');
-      if(t)t.classList.toggle('active',st.target==='to');
+      if(f)f.classList.toggle('active',st.target==='from'||st.target==='openStartDate');
+      if(t)t.classList.toggle('active',st.target==='to'||st.target==='openEndDate');
       App.admin._renderDatePickerPopup();
     },
     shiftDatePickerMonth:function(delta){
@@ -5616,7 +5698,7 @@ var App={
     _pickDateFromPopup:function(ymd){
       var st=App.admin._datePickerState||{};
       if(!App.admin._isYmd(ymd))return;
-      if(st.target==='to')st.to=ymd;
+      if(st.target==='to'||st.target==='openEndDate')st.to=ymd;
       else st.from=ymd;
       if(st.from&&st.to&&st.from>st.to){
         if(st.target==='from')st.to=st.from;
@@ -5683,7 +5765,7 @@ var App={
     },
     applyDatePickerPopup:function(){
       var st=App.admin._datePickerState||{};
-      var ctx=st.context==='batch'?'batch':'orders';
+      var ctx=(st.context==='batch'||st.context==='logs'||st.context==='shop-hours')?st.context:'orders';
       var from=String(st.from||'').trim();
       var to=String(st.to||'').trim();
       if(from&&to&&from>to){
@@ -5695,6 +5777,17 @@ var App={
         App.admin._ordersDateTo=to;
         App.admin._syncDateInputs('orders');
         App.admin.applyOrdersDateRange();
+      }else if(ctx==='logs'){
+        App.admin._logsDateFrom=from;
+        App.admin._logsDateTo=to;
+        App.admin._syncDateInputs('logs');
+        App.admin.loadActivityLogs(true);
+      }else if(ctx==='shop-hours'){
+        var sd=document.getElementById('s-open-start-date');
+        var ed=document.getElementById('s-open-end-date');
+        if(sd){sd.dataset.ymd=from;sd.value=App.admin._fmtYmdThai(from);}
+        if(ed){ed.dataset.ymd=to;ed.value=App.admin._fmtYmdThai(to);}
+        App.admin._syncShopHoursHidden();
       }else{
         var bf=document.getElementById('bp-date-from');
         var bt=document.getElementById('bp-date-to');

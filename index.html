@@ -664,11 +664,31 @@
               <h3 style="font-weight:700;margin-bottom:14px;font-size:15px">📅 ช่วงเวลาเปิดร้าน</h3>
               <div class="form-group">
                 <label class="form-label">วันเวลาเริ่มเปิด</label>
-                <input id="s-open-start" type="datetime-local" class="form-input" onchange="App.admin._renderShopHoursPreview()">
+                <div class="calendar-range-row">
+                  <input id="s-open-start-date" type="text" class="form-input calendar-range-input" placeholder="เลือกวันที่เริ่ม" readonly onclick="App.admin.openDatePickerPopup('shop-hours','openStartDate')">
+                  <input id="s-open-start-time" type="time" class="form-input" style="max-width:130px" onchange="App.admin._syncShopHoursHidden()">
+                  <button class="btn btn-secondary calendar-range-btn" type="button" onclick="App.admin.openDatePickerPopup('shop-hours','openStartDate')">เลือกวันที่</button>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                  <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('start','today')">วันนี้</button>
+                  <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('start','tomorrow')">พรุ่งนี้</button>
+                  <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('start','clear')">ล้างวันที่</button>
+                </div>
+                <input id="s-open-start" type="hidden">
               </div>
               <div class="form-group">
                 <label class="form-label">วันเวลาสิ้นสุดการเปิด</label>
-                <input id="s-open-end" type="datetime-local" class="form-input" onchange="App.admin._renderShopHoursPreview()">
+                <div class="calendar-range-row">
+                  <input id="s-open-end-date" type="text" class="form-input calendar-range-input" placeholder="เลือกวันที่สิ้นสุด" readonly onclick="App.admin.openDatePickerPopup('shop-hours','openEndDate')">
+                  <input id="s-open-end-time" type="time" class="form-input" style="max-width:130px" onchange="App.admin._syncShopHoursHidden()">
+                  <button class="btn btn-secondary calendar-range-btn" type="button" onclick="App.admin.openDatePickerPopup('shop-hours','openEndDate')">เลือกวันที่</button>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                  <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('end','today')">วันนี้</button>
+                  <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('end','tomorrow')">พรุ่งนี้</button>
+                  <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 10px;font-size:12px" onclick="App.admin.quickSetShopHoursDate('end','clear')">ล้างวันที่</button>
+                </div>
+                <input id="s-open-end" type="hidden">
               </div>
               <p class="text-xs text-muted">ถ้าเว้นว่างทั้งสองช่อง จะใช้แค่สวิตช์เปิด/ปิดร้าน</p>
               <p id="shop-hours-preview" class="text-xs text-muted" style="margin-top:4px">ช่วงเวลา: ใช้ตามสวิตช์เปิด/ปิดร้าน</p>
@@ -723,10 +743,22 @@
                 </div>
               </div>
               <div class="grid two" style="gap:8px;margin-bottom:10px">
-                <input id="logs-date-from" type="date" class="form-input" onchange="App.admin._renderLogsDatePreview();App.admin.loadActivityLogs(true)">
-                <input id="logs-date-to" type="date" class="form-input" onchange="App.admin._renderLogsDatePreview();App.admin.loadActivityLogs(true)">
+                <div class="calendar-range-row">
+                  <input id="logs-date-from" type="text" class="form-input calendar-range-input" placeholder="เริ่มวันที่" readonly onclick="App.admin.openDatePickerPopup('logs','from')">
+                  <button class="btn btn-secondary calendar-range-btn" type="button" onclick="App.admin.openDatePickerPopup('logs','from')">เลือก</button>
+                </div>
+                <div class="calendar-range-row">
+                  <input id="logs-date-to" type="text" class="form-input calendar-range-input" placeholder="สิ้นสุดวันที่" readonly onclick="App.admin.openDatePickerPopup('logs','to')">
+                  <button class="btn btn-secondary calendar-range-btn" type="button" onclick="App.admin.openDatePickerPopup('logs','to')">เลือก</button>
+                </div>
               </div>
               <p id="logs-date-preview" class="text-xs text-muted" style="margin:-2px 0 10px">ช่วงวันที่: ทั้งหมด</p>
+              <div class="filter-row" style="margin-bottom:10px">
+                <button class="filter-chip" type="button" onclick="App.admin.quickPickLogsDateRange('today')">วันนี้</button>
+                <button class="filter-chip" type="button" onclick="App.admin.quickPickLogsDateRange('7')">7 วัน</button>
+                <button class="filter-chip" type="button" onclick="App.admin.quickPickLogsDateRange('30')">30 วัน</button>
+                <button class="filter-chip active" type="button" onclick="App.admin.quickPickLogsDateRange('clear')">ทั้งหมด</button>
+              </div>
               <div class="grid two" style="gap:8px;margin-bottom:10px">
                 <select id="logs-module" class="form-input" onchange="App.admin.loadActivityLogs(true)">
                   <option value="">ทุกหมวด</option>
@@ -755,6 +787,9 @@
                   <option value="error">error</option>
                 </select>
                 <input id="logs-search" type="text" class="form-input" placeholder="ค้นหา module/action/message" oninput="App.admin.onLogsFilterInput()">
+              </div>
+              <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+                <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px" type="button" onclick="App.admin.loadActivityLogs(true)">ค้นหา</button>
               </div>
               <div class="table-wrap logs-table-wrap">
                 <table>

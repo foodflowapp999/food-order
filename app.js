@@ -59,7 +59,13 @@ var App={
       if(!raw)return '-';
       var dt=(raw instanceof Date)?raw:new Date(raw);
       if(!dt||isNaN(dt.getTime()))return '-';
-      return dt.toLocaleString('th-TH',{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+      return dt.toLocaleString('th-TH',{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+    },
+    formatDateTH(raw){
+      if(!raw)return '-';
+      var dt=(raw instanceof Date)?raw:new Date(raw);
+      if(!dt||isNaN(dt.getTime()))return '-';
+      return dt.toLocaleDateString('th-TH',{year:'numeric',month:'short',day:'2-digit'});
     },
     digitsOnly(v){return String(v==null?'':v).replace(/[^0-9]/g,'');},
     isValidPromptPayId(v){
@@ -4303,6 +4309,7 @@ var App={
         var range={};try{range=JSON.parse(s.shop_open_range||'{}');}catch(_){range={};}
         setVal('s-open-start',App.admin._toDateTimeLocal(range.start||''));
         setVal('s-open-end',App.admin._toDateTimeLocal(range.end||''));
+        App.admin._renderShopHoursPreview();
         // PERF-FIX: users/logs are lazy-loaded on tab open
         App.admin._toggleCustomPaperField('ps-paper','ps-paper-custom-wrap');
         App.admin._toggleCustomPaperField('bp-paper','bp-paper-custom-wrap');
@@ -4643,6 +4650,16 @@ var App={
         search:getVal('logs-search')
       };
     },
+    _renderLogsDatePreview:function(){
+      var out=document.getElementById('logs-date-preview');
+      if(!out)return;
+      var from=String((document.getElementById('logs-date-from')&&document.getElementById('logs-date-from').value)||'').trim();
+      var to=String((document.getElementById('logs-date-to')&&document.getElementById('logs-date-to').value)||'').trim();
+      if(!from&&!to){out.textContent='ช่วงวันที่: ทั้งหมด';return;}
+      if(from&&to){out.textContent='ช่วงวันที่: '+App.u.formatDateTH(from)+' ถึง '+App.u.formatDateTH(to);return;}
+      if(from){out.textContent='ช่วงวันที่: ตั้งแต่ '+App.u.formatDateTH(from);return;}
+      out.textContent='ช่วงวันที่: ถึง '+App.u.formatDateTH(to);
+    },
     onLogsFilterInput:function(){
       if(App.admin._logsFilterTimer)clearTimeout(App.admin._logsFilterTimer);
       App.admin._logsFilterTimer=setTimeout(function(){App.admin.loadActivityLogs(true);},260);
@@ -4691,6 +4708,7 @@ var App={
       },{silent:true,noLoader:true,key:'logs_lite'});
     },
     loadActivityLogs:function(force){
+      App.admin._renderLogsDatePreview();
       var st=App.admin._logsState||{};
       if(force){
         st.page=1;
@@ -4702,6 +4720,9 @@ var App={
         return;
       }
       App.admin._renderActivityLogs(st.items);
+    },
+    loadLogs:function(force){
+      App.admin.loadActivityLogs(!!force);
     },
     _renderActivityLogs:function(logs){
       var tb=document.getElementById('activity-log-table');if(!tb)return;
@@ -5026,6 +5047,18 @@ var App={
     onShopToggleChanged:function(checked){
       // เปลี่ยนเฉพาะสถานะในฟอร์มก่อน และจะบันทึกจริงเมื่อกดปุ่ม "บันทึกการตั้งค่า"
       App.admin.renderShopStatus(checked);
+      App.admin._renderShopHoursPreview();
+    },
+    _renderShopHoursPreview:function(){
+      var startEl=document.getElementById('s-open-start');
+      var endEl=document.getElementById('s-open-end');
+      var preview=document.getElementById('shop-hours-preview');
+      if(!preview)return;
+      var startRaw=String(startEl&&startEl.value||'').trim();
+      var endRaw=String(endEl&&endEl.value||'').trim();
+      if(!startRaw&&!endRaw){preview.textContent='ช่วงเวลา: ใช้ตามสวิตช์เปิด/ปิดร้าน';return;}
+      if((startRaw&&!endRaw)||(!startRaw&&endRaw)){preview.textContent='ช่วงเวลา: กรุณาระบุวันเวลาเริ่มและสิ้นสุดให้ครบ';return;}
+      preview.textContent='ช่วงเวลา: '+App.u.formatDateTimeTH(startRaw)+' ถึง '+App.u.formatDateTimeTH(endRaw);
     },
 
     // BANK MANAGEMENT

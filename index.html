@@ -664,13 +664,14 @@
               <h3 style="font-weight:700;margin-bottom:14px;font-size:15px">📅 ช่วงเวลาเปิดร้าน</h3>
               <div class="form-group">
                 <label class="form-label">วันเวลาเริ่มเปิด</label>
-                <input id="s-open-start" type="datetime-local" class="form-input">
+                <input id="s-open-start" type="datetime-local" class="form-input" onchange="App.admin._renderShopHoursPreview()">
               </div>
               <div class="form-group">
                 <label class="form-label">วันเวลาสิ้นสุดการเปิด</label>
-                <input id="s-open-end" type="datetime-local" class="form-input">
+                <input id="s-open-end" type="datetime-local" class="form-input" onchange="App.admin._renderShopHoursPreview()">
               </div>
               <p class="text-xs text-muted">ถ้าเว้นว่างทั้งสองช่อง จะใช้แค่สวิตช์เปิด/ปิดร้าน</p>
+              <p id="shop-hours-preview" class="text-xs text-muted" style="margin-top:4px">ช่วงเวลา: ใช้ตามสวิตช์เปิด/ปิดร้าน</p>
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
                 <button id="save-settings-shop-hours-btn" class="btn btn-primary" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.saveSettingsTab('shop-hours')">บันทึกเวลาเปิด-ปิด</button>
               </div>
@@ -722,9 +723,10 @@
                 </div>
               </div>
               <div class="grid two" style="gap:8px;margin-bottom:10px">
-                <input id="logs-date-from" type="date" class="form-input" onchange="App.admin.loadActivityLogs(true)">
-                <input id="logs-date-to" type="date" class="form-input" onchange="App.admin.loadActivityLogs(true)">
+                <input id="logs-date-from" type="date" class="form-input" onchange="App.admin._renderLogsDatePreview();App.admin.loadActivityLogs(true)">
+                <input id="logs-date-to" type="date" class="form-input" onchange="App.admin._renderLogsDatePreview();App.admin.loadActivityLogs(true)">
               </div>
+              <p id="logs-date-preview" class="text-xs text-muted" style="margin:-2px 0 10px">ช่วงวันที่: ทั้งหมด</p>
               <div class="grid two" style="gap:8px;margin-bottom:10px">
                 <select id="logs-module" class="form-input" onchange="App.admin.loadActivityLogs(true)">
                   <option value="">ทุกหมวด</option>

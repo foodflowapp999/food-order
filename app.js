@@ -1058,11 +1058,23 @@ var App={
     },
     toCart(){if(App.state._shopOpenNow===false){App.ui.toast('ร้านปิดอยู่','warn');return;}if(!App.state.cart.length){App.ui.toast('ตะกร้าว่าง','error');return;}App.ui.nav('cart');},
     toInfo(){if(App.state._shopOpenNow===false){App.ui.toast('ร้านปิดอยู่','warn');return;}if(!App.state.cart.length){App.ui.toast('ตะกร้าว่าง','error');return;}App.ui.nav('info');},
+    _cleanCustomerText:function(value,maxLen){
+      var m=Math.max(1,parseInt(maxLen||300,10)||300);
+      if(value==null)return '';
+      if(typeof value==='object')return '';
+      var s=String(value||'').trim();
+      if(!s)return '';
+      if(/^error$/i.test(s))return '';
+      if(s==='[object Object]')return '';
+      if(s.length>m)s=s.slice(0,m);
+      return s;
+    },
     toPayment(){
       if(App.state._shopOpenNow===false){App.ui.toast('ร้านปิดอยู่ ไม่สามารถสั่งอาหารได้','warn');return;}
       if(App.u.debounce('checkout',4000))return;
       var nameEl=document.getElementById('cust-name'),deptEl=document.getElementById('dept-select'),noteEl=document.getElementById('cust-note'),customerNoteEl=document.getElementById('cust-customer-note');
-      var name=nameEl?nameEl.value.trim():'',dept=deptEl?deptEl.value:'',note=noteEl?noteEl.value.trim():'',customerNote=customerNoteEl?customerNoteEl.value.trim():'';
+      var name=nameEl?nameEl.value.trim():'',dept=deptEl?deptEl.value:'',noteRaw=noteEl?noteEl.value:'',customerNoteRaw=customerNoteEl?customerNoteEl.value:'';
+      var note=App.customer._cleanCustomerText(noteRaw,300),customerNote=App.customer._cleanCustomerText(customerNoteRaw,300);
       var isVillage=String(App.state._deliveryCategoryType||'village')==='village';
       if(isVillage)dept='';
       if(!name){App.ui.toast('กรุณากรอกชื่อ','error');if(nameEl)nameEl.focus();return;}
@@ -1071,8 +1083,8 @@ var App={
       if(!App.customer._isScanEnabled()&&!App.customer._isCashEnabled()){App.ui.toast('ร้านยังไม่ได้เปิดใช้งานวิธีชำระเงิน','error');return;}
       var paymentMethod=App.customer._isCashEnabled()?(App.state._paymentMethod||'scan'):'scan';
       if(paymentMethod==='scan'&&!App.customer._isScanEnabled()){App.ui.toast('ร้านยังไม่ได้เปิดใช้งานวิธีชำระเงิน','error');return;}
-      var payload={customer:name,department:dept,note:note,customerNote:customerNote,items:App.state.cart.map(function(i){return{menuId:i.menuId,qty:i.qty,selectedChoices:(i.options||[]).map(function(c){return (c&&c.label)?c.label:String(c||'');})};}),paymentMethod:paymentMethod};
-      App.state._paymentPayload={customer:name,department:dept,note:note,customerNote:customerNote,cart:JSON.parse(JSON.stringify(App.state.cart)),promo:JSON.parse(JSON.stringify(App.state.promo)),paymentMethod:paymentMethod};
+      var payload={customer:name,department:dept,note:note,customerNote:customerNote,customer_note:customerNote,items:App.state.cart.map(function(i){return{menuId:i.menuId,qty:i.qty,selectedChoices:(i.options||[]).map(function(c){return (c&&c.label)?c.label:String(c||'');})};}),paymentMethod:paymentMethod};
+      App.state._paymentPayload={customer:name,department:dept,note:note,customerNote:customerNote,customer_note:customerNote,cart:JSON.parse(JSON.stringify(App.state.cart)),promo:JSON.parse(JSON.stringify(App.state.promo)),paymentMethod:paymentMethod};
       var btn=document.getElementById('to-payment-btn');App.ui.setBtn(btn,true);
       if(paymentMethod==='cash'){
         App.api.call('createCashOrder',[payload],function(res){
@@ -6446,6 +6458,12 @@ var App={
         var glowAt=App.admin._ordersNewFlashIds[oid];
         if(glowAt&&((Date.now()-glowAt)<30000))isNewGlow=true;
         else if(glowAt)delete App.admin._ordersNewFlashIds[oid];
+        var orderNote=String(o&&((o.note!=null&&o.note!=='')?o.note:o.order_note)||'').trim();
+        var customerNote=String(o&&((o.customer_note!=null&&o.customer_note!=='')?o.customer_note:o.customerNote)||'').trim();
+        if(/^error$/i.test(customerNote)||customerNote==='[object Object]'){
+          console.warn('Skip invalid customer note for order',oid,customerNote);
+          customerNote='';
+        }
         return'<div class="order-row'+(isNewGlow?' order-row-new':'')+'">'
           +'<div class="order-row-meta">'
             +'<div class="order-seq">#'+seq+'</div>'
@@ -6456,8 +6474,8 @@ var App={
             +'<div class="order-row-customer">👤 '+e(o.customer||'?')+((showDeptOnOrderCard&&o.department)?' &nbsp;<span style="font-size:12px;color:var(--text2)">🏢 '+e(o.department)+'</span>':'')+'</div>'
             +'<div class="text-xs" style="margin:4px 0;color:'+(String(o.payment_method||'').toLowerCase()==='cash'?'#b91c1c':'var(--text2)')+';font-weight:'+(String(o.payment_method||'').toLowerCase()==='cash'?'700':'500')+'">💳 '+e(App.admin._payMethodLabel(o.payment_method||''))+'</div>'
             +'<div class="order-row-items">'+itemsHtml+'</div>'
-            +(o.note?'<div class="text-xs text-muted" style="margin-top:4px">'+(App.admin._getDeliveryCategoryType()==='village'?'📍 ':'📝 ')+e(o.note)+'</div>':'')
-            +(o.customer_note?'<div class="text-xs text-muted" style="margin-top:4px">💬 '+e(App.admin._customerNoteLabel())+': '+e(o.customer_note)+'</div>':'')
+            +(orderNote?'<div class="text-xs text-muted" style="margin-top:4px">'+(App.admin._getDeliveryCategoryType()==='village'?'📍 ':'📝 ')+e(orderNote)+'</div>':'')
+            +(customerNote?'<div class="text-xs text-muted" style="margin-top:4px">💬 '+e(App.admin._customerNoteLabel())+': '+e(customerNote)+'</div>':'')
           +'</div>'
           +'<div class="order-row-right">'
             +'<span class="badge '+st.cls+'" style="margin-bottom:2px">'+e(st.label)+'</span>'
@@ -6535,6 +6553,10 @@ var App={
       var header=['ลำดับ','รหัสออเดอร์','วันที่เวลา','ชื่อลูกค้า',App.admin._deptLabel(),'รายการอาหาร','ยอดรวม','วิธีชำระเงิน','สถานะ',App.admin._noteLabel(),App.admin._customerNoteLabel()];
       var lines=[header.map(App.admin._csvCell).join(',')];
       rows.forEach(function(o,idx){
+        var orderNote=String((o&&((o.note!=null&&o.note!=='')?o.note:o.order_note))||'').trim();
+        var customerNote=String((o&&((o.customer_note!=null&&o.customer_note!=='')?o.customer_note:o.customerNote))||'').trim();
+        if(/^error$/i.test(orderNote)||orderNote==='[object Object]')orderNote='';
+        if(/^error$/i.test(customerNote)||customerNote==='[object Object]')customerNote='';
         var items=(o.items||[]).map(function(it){
           var qty=parseInt(it.qty||1);
           var nm=String(it.name||'');
@@ -6551,8 +6573,8 @@ var App={
           Math.round(parseFloat(o.total||0)),
           App.admin._payMethodLabel(o.payment_method||''),
           o.status||'',
-          o.note||'',
-          o.customer_note||''
+          orderNote,
+          customerNote
         ];
         lines.push(line.map(App.admin._csvCell).join(','));
       });
@@ -7419,9 +7441,13 @@ var App={
         return s.split(/\r?\n|,/).map(function(x){return String(x||'').replace(/^[^:：]+[:：]\s*/,'').trim();}).filter(Boolean);
       };
       var isVillage=App.admin._getDeliveryCategoryType()==='village';
-      var customerAddress=isVillage?String(o&&o.note||'').trim():'';
-      var orderDetail=isVillage?String(o&&o.customer_note||'').trim():String(o&&o.note||'').trim();
-      var orderDetailExtra=isVillage?'':String(o&&o.customer_note||'').trim();
+      var orderNoteRaw=String(o&&((o.note!=null&&o.note!=='')?o.note:o.order_note)||'').trim();
+      var customerNoteRaw=String(o&&((o.customer_note!=null&&o.customer_note!=='')?o.customer_note:o.customerNote)||'').trim();
+      if(/^error$/i.test(orderNoteRaw)||orderNoteRaw==='[object Object]')orderNoteRaw='';
+      if(/^error$/i.test(customerNoteRaw)||customerNoteRaw==='[object Object]')customerNoteRaw='';
+      var customerAddress=isVillage?orderNoteRaw:'';
+      var orderDetail=isVillage?customerNoteRaw:orderNoteRaw;
+      var orderDetailExtra=isVillage?'':customerNoteRaw;
       var noFrame=!!App.admin._printPdfNoFrame;
       if(tab==='receipt'){
         var sizeVal=mode==='batch'?App.admin._resolvePaperSize('bp-paper','bp-paper-custom','80mm'):App.admin._resolvePaperSize('ps-paper','ps-paper-custom','80mm');

@@ -55,6 +55,12 @@ var App={
     debounce(key,ms){ms=ms||800;if(App.state._actionBusy[key])return true;App.state._actionBusy[key]=true;setTimeout(function(){delete App.state._actionBusy[key];},ms);return false;},
     esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');},
     fmt(n){return '฿'+Math.round(toNum(n)).toLocaleString('th-TH');},
+    formatDateTimeTH(raw){
+      if(!raw)return '-';
+      var dt=(raw instanceof Date)?raw:new Date(raw);
+      if(!dt||isNaN(dt.getTime()))return '-';
+      return dt.toLocaleString('th-TH',{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+    },
     digitsOnly(v){return String(v==null?'':v).replace(/[^0-9]/g,'');},
     isValidPromptPayId(v){
       var d=App.u.digitsOnly(v);
@@ -296,6 +302,31 @@ var App={
   ui:{
     _popupTimer:null,
     _confirmBusy:false,
+    applyGlobalBrand:function(name,logo){
+      var fallbackName=(typeof window!=='undefined'&&window._restaurantName)?String(window._restaurantName):'FoodOrder';
+      var fallbackLogo=(typeof window!=='undefined'&&window._restaurantLogo)?String(window._restaurantLogo):'';
+      var safeName=String(name||fallbackName||'FoodOrder').trim()||'FoodOrder';
+      var safeLogo=String(logo||fallbackLogo||'').trim();
+      var applyLogo=function(el){
+        if(!el)return;
+        if(!safeLogo){el.innerHTML='🍽';return;}
+        el.innerHTML='<img src="'+App.u.esc(safeLogo)+'" alt="logo" onerror="this.parentNode.innerHTML=\'🍽\'">';
+      };
+      try{
+        document.querySelectorAll('.brand-name').forEach(function(el){el.textContent=safeName;});
+      }catch(_){}
+      applyLogo(document.getElementById('topbar-brand-logo'));
+      var adminName=document.getElementById('admin-sidebar-brand-name');
+      if(adminName)adminName.textContent=safeName;
+      applyLogo(document.getElementById('admin-sidebar-logo'));
+      try{document.title=safeName;}catch(_){}
+      window._restaurantName=safeName;
+      window._restaurantLogo=safeLogo;
+      App.state._restaurantLogo=safeLogo;
+      try{
+        localStorage.setItem('fo_brand_cache_v1',JSON.stringify({name:safeName,logo:safeLogo,ts:Date.now()}));
+      }catch(_){}
+    },
     toast(msg,type,options){
       type=type||'info';
       options=options||{};
@@ -594,14 +625,7 @@ var App={
       App.customer.applyPaymentMethodUI();
     },
     applyBrand:function(name,logo){
-      var safeName=String(name||window._restaurantName||'FoodOrder');
-      var safeLogo=String(logo||'').trim();
-      App.state._restaurantLogo=safeLogo;
-      document.querySelectorAll('.brand-name').forEach(function(el){el.textContent=safeName;});
-      var w=document.getElementById('topbar-brand-logo');
-      if(!w)return;
-      if(!safeLogo){w.innerHTML='🍽';return;}
-      w.innerHTML='<img src="'+App.u.esc(safeLogo)+'" alt="logo" onerror="this.parentNode.innerHTML=\'🍽\'">';
+      App.ui.applyGlobalBrand(name,logo);
     },
     _isOpenBySettings:function(s){
       if(!s)return true;
@@ -1727,6 +1751,7 @@ var App={
       App.api.silent('getSettings',[],function(res){
         if(res&&res.success&&res.data){
           App.state._settingsRaw=res.data||{};
+          App.ui.applyGlobalBrand(res.data.restaurant_name,res.data.restaurant_logo);
           App.state._deliveryCategoryType=App.admin._normalizeDeliveryType(res.data.delivery_category_type||'village');
           App.state._deliveryNoteMode=(App.state._deliveryCategoryType==='village'?'address':'note');
           var typeSel=document.getElementById('s-delivery-type-select');
@@ -1740,17 +1765,7 @@ var App={
       App.ui.adminNav('orders');
     },
     applyAdminBrand:function(name,logo){
-      var brandName=String(name||window._restaurantName||'FoodOrder');
-      var brandLogo=String(logo||'').trim();
-      var nameEl=document.getElementById('admin-sidebar-brand-name');
-      var logoEl=document.getElementById('admin-sidebar-logo');
-      if(nameEl)nameEl.textContent=brandName;
-      if(logoEl){
-        if(!brandLogo)logoEl.innerHTML='🍽';
-        else logoEl.innerHTML='<img src="'+App.u.esc(brandLogo)+'" alt="logo" onerror="this.parentNode.innerHTML=\'🍽\'">';
-      }
-      window._restaurantName=brandName;
-      window._restaurantLogo=brandLogo;
+      App.ui.applyGlobalBrand(name,logo);
     },
     login(){
       if(App.u.debounce('login',2500))return;
@@ -4274,8 +4289,7 @@ var App={
         setVal('s-slipok',s.slipok_api_key);setVal('s-branch',s.slipok_branch_id);setVal('s-drive',App.admin._extractGoogleDriveResourceId(s.drive_folder_id));
         setVal('s-drive-folder-name',s.menu_image_folder_name||'FoodFlow/Menu Images');
         App.admin.refreshDriveStatus(App.admin._extractGoogleDriveResourceId(s.drive_folder_id)?'ready':'idle',{folderId:App.admin._extractGoogleDriveResourceId(s.drive_folder_id)});
-        App.customer.applyBrand(s.restaurant_name,s.restaurant_logo);
-        App.admin.applyAdminBrand(s.restaurant_name,s.restaurant_logo);
+        App.ui.applyGlobalBrand(s.restaurant_name,s.restaurant_logo);
         App.state._storeLogoB64=null;
         App.state._storeLogoSrcUrl=String(s.restaurant_logo||'');
         App.admin.switchStoreLogoTab('url');
@@ -4701,8 +4715,7 @@ var App={
         return 'log-level-info';
       };
       tb.innerHTML=logs.map(function(x){
-        var dt=x&&(x.timestamp||x.created_at)?new Date(x.timestamp||x.created_at):null;
-        var dtx=(dt&&!isNaN(dt.getTime()))?dt.toLocaleString('th-TH'):'-';
+        var dtx=App.u.formatDateTimeTH(x&&(x.timestamp||x.created_at));
         var lv=String(x&&x.level||'INFO').toUpperCase();
         var mod=String(x&&x.module||'-');
         var action=String(x&&x.action||'-');
@@ -4871,6 +4884,7 @@ var App={
             if(res&&res.success&&scope==='store'){
               App.state._storeLogoB64=null;
               App.state._storeLogoSrcUrl=String(finalPayload.restaurant_logo||'');
+              App.ui.applyGlobalBrand(finalPayload.restaurant_name,finalPayload.restaurant_logo);
             }
             done(res);
           });
@@ -7308,6 +7322,16 @@ var App={
 
   init:function(){
     var isAdmin=(window._isAdmin===true);
+    try{
+      var braw=localStorage.getItem('fo_brand_cache_v1')||'';
+      if(braw){
+        var b=JSON.parse(braw||'{}');
+        if(b&&typeof b==='object'){
+          if(b.name)window._restaurantName=String(b.name||window._restaurantName||'FoodOrder');
+          if(b.logo!=null)window._restaurantLogo=String(b.logo||window._restaurantLogo||'');
+        }
+      }
+    }catch(_){}
     App.state._deliveryCategoryType=App.admin._normalizeDeliveryType(window._deliveryCategoryType||App.state._deliveryCategoryType||'village');
     App.state._deliveryNoteMode=(App.state._deliveryCategoryType==='village'?'address':'note');
     App.state._cashPaymentEnabled=(window._cashPaymentEnabled===true);
@@ -7316,8 +7340,7 @@ var App={
     App.customer.applyOrderInfoLabels();
     App.customer.applyPaymentMethodUI();
     // show restaurant brand
-    App.customer.applyBrand(window._restaurantName||'FoodOrder',window._restaurantLogo||'');
-    App.admin.applyAdminBrand(window._restaurantName||'FoodOrder',window._restaurantLogo||'');
+    App.ui.applyGlobalBrand(window._restaurantName||'FoodOrder',window._restaurantLogo||'');
     
     var ae=document.getElementById('admin-app'),ce=document.getElementById('customer-app');
     App.state._navigating=false;

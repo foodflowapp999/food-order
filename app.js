@@ -310,10 +310,10 @@ var App={
       icon.textContent=m.i;icon.style.color=m.c;
       var title=String(options.title||'').trim();
       txt.innerHTML=(title?('<div class="popup-title">'+App.u.esc(title)+'</div>'):'')+'<div class="popup-message">'+App.u.esc(String(msg||''))+'</div>';
-      var defaults={success:3000,info:3500,warn:6000,error:8000};
+      var defaults={success:1200,info:1600,warn:4500,error:6500};
       var sticky=!!options.sticky;
       var duration=Math.max(1200,parseInt(options.duration,10)||defaults[type]||3500);
-      var showClose=(type==='warn'||type==='error'||sticky||options.closeButton===true);
+      var showClose=(type==='warn'||type==='error'||options.closeButton===true);
       var closeBtn=document.getElementById('center-popup-close');
       if(!closeBtn){
         closeBtn=document.createElement('button');
@@ -1656,6 +1656,8 @@ var App={
         }
         var sm=String((d&&d.message)||res.message||'สร้าง/เชื่อมต่อโฟลเดอร์สำเร็จ');
         App.admin.refreshDriveStatus('ready',{folderId:String(d.folderId||''),folderName:String(d.folderName||''),message:sm});
+        App.admin._invalidateCache(['settings','menu']);
+        App.admin.loadSettings(true);
         App.ui.toast(sm,'success',{duration:3500});
       },{silent:true});
     },
@@ -3960,29 +3962,19 @@ var App={
           var data={id:id,name:name,price:price,stock:(String(stockRaw||'').trim()===''?'':parseInt(stockRaw,10)),category:document.getElementById('mf-category').value,image:finalUrl,status:document.getElementById('mf-status').value,topic_ids:JSON.stringify(selectedTopics)};
           App.api.call('adminCRUDMenu',[id?'update':'insert',data,App.state.adminToken],function(res){
             if(App.admin._auth(res))return;
+            if(!res||!res.success){
+              if(String(res&&res.code||'')==='DRIVE_FOLDER_NOT_CONFIGURED'){
+                App.admin._invalidateCache('settings');
+                App.admin.loadSettings(true);
+                res=res||{};
+                res.message='ยังไม่ได้บันทึกโฟลเดอร์ Google Drive กรุณาไปที่ ตั้งค่า > Google Drive แล้วกดสร้าง/เชื่อมต่อโฟลเดอร์อัตโนมัติ';
+              }
+            }
             done(res);
           });
         };
-        if(b64&&b64.startsWith('data:image')){
-          App.api.silent('getSettings',[],function(cfgRes){
-            var drv=cfgRes&&cfgRes.success&&cfgRes.data?String(cfgRes.data.drive_folder_id||'').trim():'';
-            if(!drv){
-              if(String(b64).length>49000){
-                done({success:false,message:'รูปใหญ่เกินไป กรุณาตั้งค่า Google Drive Folder ID ก่อนอัปโหลดรูป'});
-                return;
-              }
-              doSave(b64);
-              return;
-            }
-            App.ui.toast('⏳ กำลังอัพโหลดรูป...','info');
-            var mimeType=b64.split(';')[0].split(':')[1]||'image/jpeg';
-            var rawB64=b64.split(',')[1]||'';
-            App.api.call('uploadImageToDrive',[rawB64,'menu_'+Date.now()+'.jpg',mimeType,App.state.adminToken],function(res){
-              if(res&&res.success&&res.data&&res.data.url){doSave(res.data.url);}
-              else{done(res||{success:false,message:'อัพโหลดรูปไม่ได้'});}
-            },{key:'imgupload'});
-          });
-        }else{doSave(imgUrl);}
+        if(b64&&b64.startsWith('data:image')){doSave(b64);}
+        else{doSave(imgUrl);}
       });
     },
     renderMenuTopicsSelector(menuId,topicIdsJson){

@@ -273,7 +273,9 @@ var App={
         notification_line_target_id:'',
         notification_telegram_enabled:'0',
         notification_telegram_bot_token_masked:'',
-        notification_telegram_chat_id:''
+        notification_telegram_chat_id:'',
+        notification_include_admin_link:'0',
+        notification_admin_url:''
       }};
       if(fn==='saveNotificationSettings')return{success:true,data:{saved:true}};
       if(fn==='testLineNotification')return{success:true,data:{ok:true,message:'โหมดเดโม: ส่ง LINE สำเร็จ'}};
@@ -294,20 +296,43 @@ var App={
   ui:{
     _popupTimer:null,
     _confirmBusy:false,
-    toast(msg,type){
+    toast(msg,type,options){
       type=type||'info';
+      options=options||{};
       var ov=document.getElementById('center-popup-overlay');
       var icon=document.getElementById('center-popup-icon');
       var txt=document.getElementById('center-popup-text');
-      if(!ov||!icon||!txt)return;
+      var card=document.getElementById('center-popup-card');
+      if(!ov||!icon||!txt||!card)return;
       ov.classList.toggle('customer-mode',App.ui._isCustomerContext());
       var map={success:{i:'✓',c:'#22c55e'},error:{i:'✕',c:'#ef4444'},warn:{i:'⚠',c:'#f59e0b'},info:{i:'ℹ',c:'#38bdf8'}};
       var m=map[type]||map.info;
       icon.textContent=m.i;icon.style.color=m.c;
-      txt.textContent=String(msg||'');
+      var title=String(options.title||'').trim();
+      txt.innerHTML=(title?('<div class="popup-title">'+App.u.esc(title)+'</div>'):'')+'<div class="popup-message">'+App.u.esc(String(msg||''))+'</div>';
+      var defaults={success:3000,info:3500,warn:6000,error:8000};
+      var sticky=!!options.sticky;
+      var duration=Math.max(1200,parseInt(options.duration,10)||defaults[type]||3500);
+      var showClose=(type==='warn'||type==='error'||sticky||options.closeButton===true);
+      var closeBtn=document.getElementById('center-popup-close');
+      if(!closeBtn){
+        closeBtn=document.createElement('button');
+        closeBtn.id='center-popup-close';
+        closeBtn.className='popup-close-btn';
+        closeBtn.type='button';
+        closeBtn.textContent='ปิด';
+        closeBtn.onclick=function(){
+          ov.classList.remove('active');
+          ov.classList.remove('customer-mode');
+        };
+        card.appendChild(closeBtn);
+      }
+      closeBtn.style.display=showClose?'inline-flex':'none';
       ov.classList.add('active');
       if(App.ui._popupTimer)clearTimeout(App.ui._popupTimer);
-      App.ui._popupTimer=setTimeout(function(){ov.classList.remove('active');ov.classList.remove('customer-mode');},1700);
+      if(!sticky){
+        App.ui._popupTimer=setTimeout(function(){ov.classList.remove('active');ov.classList.remove('customer-mode');},duration);
+      }
     },
     confirm:function(msg,cb,opts){
       opts=opts||{};
@@ -1533,6 +1558,107 @@ var App={
       el.addEventListener('paste',function(){setTimeout(sync,0);});
       el._driveNormalizeBound=true;
     },
+    refreshDriveStatus:function(mode,meta){
+      var statusEl=document.getElementById('api-drive-folder-status');
+      var metaEl=document.getElementById('api-drive-folder-meta');
+      var folderEl=document.getElementById('s-drive');
+      var folderId=folderEl?App.admin._normalizeGoogleDriveFolderInput(folderEl):'';
+      var state=String(mode||'idle');
+      var map={
+        ready:{txt:'พร้อมใช้งาน',cls:'is-ready'},
+        need_auth:{txt:'ต้อง authorize Drive',cls:'is-warn'},
+        error:{txt:'เกิดข้อผิดพลาด',cls:'is-error'},
+        checking:{txt:'กำลังตรวจสอบ...',cls:'is-info'},
+        idle:{txt:folderId?'ยังไม่ได้ตรวจสอบ':'ยังไม่ได้ตั้งค่า',cls:'is-idle'}
+      };
+      var m=map[state]||map.idle;
+      if(statusEl){
+        statusEl.textContent=m.txt;
+        statusEl.className='drive-status-text '+m.cls;
+      }
+      if(metaEl){
+        var extra='';
+        if(meta&&meta.folderName)extra+='โฟลเดอร์: '+String(meta.folderName);
+        if(meta&&meta.folderId)extra+=(extra?'\n':'')+'Folder ID: '+String(meta.folderId);
+        if(meta&&meta.message)extra+=(extra?'\n':'')+String(meta.message);
+        if(!extra&&folderId)extra='Folder ID: '+folderId;
+        metaEl.textContent=extra;
+      }
+      var copyBtn=document.getElementById('btn-copy-drive-id');
+      if(copyBtn)copyBtn.disabled=!folderId;
+    },
+    toggleDriveAdvanced:function(force){
+      var panel=document.getElementById('drive-advanced-panel');
+      if(!panel)return;
+      var willOpen=(typeof force==='boolean')?force:!panel.classList.contains('open');
+      panel.classList.toggle('open',willOpen);
+    },
+    toggleDriveAdvancedSettings:function(){
+      App.admin.toggleDriveAdvanced();
+    },
+    enableManualDriveFolderEdit:function(){
+      var el=document.getElementById('s-drive');
+      if(!el)return;
+      el.readOnly=false;
+      el.focus();
+      App.ui.toast('เปิดโหมดแก้ไขเองแล้ว อย่าลืมใช้ Folder ID ที่ถูกต้อง','warn',{duration:6500,closeButton:true});
+    },
+    copyDriveFolderId:function(){
+      var el=document.getElementById('s-drive');
+      var folderId=el?App.admin._normalizeGoogleDriveFolderInput(el):'';
+      if(!folderId){
+        App.ui.toast('ยังไม่มี Folder ID กรุณากดสร้างโฟลเดอร์อัตโนมัติก่อน','warn',{duration:6500,closeButton:true});
+        return;
+      }
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(folderId).then(function(){
+          App.ui.toast('คัดลอก Folder ID แล้ว','success');
+        }).catch(function(){
+          App.ui.toast('คัดลอกไม่สำเร็จ กรุณาคัดลอกเอง','warn',{duration:6500,closeButton:true});
+        });
+        return;
+      }
+      App.ui.toast('คัดลอกไม่สำเร็จ กรุณาคัดลอกเอง','warn',{duration:6500,closeButton:true});
+    },
+    openDriveFolder:function(){
+      var el=document.getElementById('s-drive');
+      var folderId=el?App.admin._normalizeGoogleDriveFolderInput(el):'';
+      if(!folderId){
+        App.ui.toast('ยังไม่มี Folder ID กรุณากดสร้างโฟลเดอร์อัตโนมัติก่อน','warn',{duration:6500,closeButton:true});
+        return;
+      }
+      var url='https://drive.google.com/drive/folders/'+encodeURIComponent(folderId);
+      window.open(url,'_blank','noopener');
+    },
+    createMenuImageFolder:function(){
+      if(!App.admin.ensureCanManageUsersApi())return;
+      var nameEl=document.getElementById('s-drive-folder-name');
+      var folderName=String((nameEl&&nameEl.value)||'').trim()||'FoodFlow/Menu Images';
+      if(nameEl)nameEl.value=folderName;
+      var btn=document.getElementById('btn-create-drive-folder');
+      App.admin.refreshDriveStatus('checking',{message:'กำลังสร้าง/เชื่อมต่อโฟลเดอร์...'});
+      if(btn)App.ui.setBtn(btn,true,'⏳ กำลังดำเนินการ...');
+      App.api.call('createMenuImageFolder',[folderName,App.state.adminToken],function(res){
+        if(btn)App.ui.setBtn(btn,false,'สร้าง/เชื่อมต่อโฟลเดอร์อัตโนมัติ');
+        if(App.admin._auth(res))return;
+        if(!res||!res.success){
+          var em=String((res&&res.message)||'สร้างโฟลเดอร์ไม่สำเร็จ');
+          var needAuth=/auth|permission|สิทธิ์|authorize/i.test(em);
+          App.admin.refreshDriveStatus(needAuth?'need_auth':'error',{message:em});
+          App.ui.toast(em,'error',{duration:9000,closeButton:true});
+          return;
+        }
+        var d=res.data||{};
+        var driveEl=document.getElementById('s-drive');
+        if(driveEl){
+          driveEl.value=String(d.folderId||'');
+          driveEl.readOnly=true;
+        }
+        var sm=String((d&&d.message)||res.message||'สร้าง/เชื่อมต่อโฟลเดอร์สำเร็จ');
+        App.admin.refreshDriveStatus('ready',{folderId:String(d.folderId||''),folderName:String(d.folderName||''),message:sm});
+        App.ui.toast(sm,'success',{duration:3500});
+      },{silent:true});
+    },
     _completeLogin:function(data,fallbackUser){
       var payload=data||{};
       App.state.adminToken=String(payload.token||'');
@@ -1679,6 +1805,9 @@ var App={
         }else{
           App.admin.loadUsers();
         }
+      }
+      if(tabId==='stab-drive'){
+        App.admin.refreshDriveStatus();
       }
       if(tabId==='stab-logs')App.admin.loadActivityLogs();
     },
@@ -2281,6 +2410,37 @@ var App={
     closeTestOrdersModal:function(){
       var m=document.getElementById('test-orders-modal');
       if(m)m.classList.remove('active');
+    },
+    openAdminModal:function(id){
+      var m=document.getElementById(String(id||''));
+      if(!m)return;
+      m.classList.add('active');
+      document.body.classList.add('modal-open');
+    },
+    closeAdminModal:function(id){
+      var modalId=String(id||'').trim();
+      if(!modalId){
+        console.warn('[closeAdminModal] missing id');
+        return;
+      }
+      var m=document.getElementById(modalId);
+      if(!m){
+        console.warn('[closeAdminModal] modal not found:',modalId);
+        return;
+      }
+      m.classList.remove('active');
+      if(modalId==='crop-modal'){
+        App.admin.closeCropModal();
+      }
+      var hasActive=document.querySelector('.admin-modal.active');
+      if(!hasActive)document.body.classList.remove('modal-open');
+      var crop=document.getElementById('crop-modal');
+      if(crop&&crop.style.display==='flex'&&!crop.classList.contains('active')){
+        App.admin.closeCropModal();
+      }
+    },
+    closeCropModal:function(){
+      App.admin.closeCrop();
     },
     onTestModeChanged:function(){
       var modeEl=document.getElementById('to-mode');
@@ -3588,7 +3748,7 @@ var App={
       }else{
         App.admin.renderMenuTopicsSelector(item?item.id:null, item?item.topic_ids:null);
       }
-      document.getElementById('menu-modal').classList.add('active');
+      App.admin.openAdminModal('menu-modal');
     },
 
     // ── IMAGE / CROP ────────────────────────────────────────────
@@ -3641,6 +3801,7 @@ var App={
       var src=App.state._cropSrcUrl;if(!src)return;
       var modal=document.getElementById('crop-modal');if(!modal)return;
       modal.style.display='flex';
+      document.body.classList.add('modal-open');
       var c=App.admin._crop;c.src=src;c.scale=1;c.x=0;c.y=0;
       // reset zoom slider
       var zs=document.getElementById('crop-zoom');if(zs)zs.value=100;
@@ -3662,6 +3823,8 @@ var App={
     closeCrop:function(){
       var modal=document.getElementById('crop-modal');if(modal)modal.style.display='none';
       App.admin._cropUnbindEvents();
+      var hasActive=document.querySelector('.admin-modal.active');
+      if(!hasActive)document.body.classList.remove('modal-open');
     },
     _cropDraw:function(){
       var c=App.admin._crop;
@@ -3918,7 +4081,7 @@ var App={
         if(typeof c==='string')return{label:c,price:0};
         return{label:String(c.label||c.name||c),price:toNum(c.price||0)};
       });
-      App.admin.renderTopicChoices();document.getElementById('tf-choice-input').value='';document.getElementById('topic-modal').classList.add('active');
+      App.admin.renderTopicChoices();document.getElementById('tf-choice-input').value='';App.admin.openAdminModal('topic-modal');
     },
     renderTopicChoices(){var list=document.getElementById('tf-choices-list');if(!list)return;var e=App.u.esc;list.innerHTML=App.state._topicChoices.map(function(c,i){var label=typeof c==='string'?c:c.label;var price=typeof c==='object'?toNum(c.price||0):0;return'<span class="choice-tag">'+e(label)+(price>0?' <small style="color:var(--primary)">+'+price+'฿</small>':'')+'<span class="remove-choice" onclick="App.admin.removeTopicChoice('+i+')" title="ลบ">×</span></span>';}).join('');},
     addTopicChoice(){var inp=document.getElementById('tf-choice-input'),priceInp=document.getElementById('tf-choice-price');if(!inp)return;var val=inp.value.trim();var price=toNum(priceInp?priceInp.value:0);if(!val){App.ui.toast('กรุณากรอกชื่อตัวเลือก','error');return;}var exists=App.state._topicChoices.some(function(c){return(typeof c==='string'?c:c.label)===val;});if(exists){App.ui.toast('มีตัวเลือกนี้แล้ว','warn');return;}App.state._topicChoices.push({label:val,price:price});inp.value='';if(priceInp)priceInp.value='';App.admin.renderTopicChoices();},
@@ -4109,6 +4272,8 @@ var App={
         var cashTog=document.getElementById('s-cash-enabled');if(cashTog)cashTog.checked=App.state._cashPaymentEnabled;
         var bankTog=document.getElementById('s-bank-enabled');if(bankTog)bankTog.checked=App.state._bankPaymentEnabled;
         setVal('s-slipok',s.slipok_api_key);setVal('s-branch',s.slipok_branch_id);setVal('s-drive',App.admin._extractGoogleDriveResourceId(s.drive_folder_id));
+        setVal('s-drive-folder-name',s.menu_image_folder_name||'FoodFlow/Menu Images');
+        App.admin.refreshDriveStatus(App.admin._extractGoogleDriveResourceId(s.drive_folder_id)?'ready':'idle',{folderId:App.admin._extractGoogleDriveResourceId(s.drive_folder_id)});
         App.customer.applyBrand(s.restaurant_name,s.restaurant_logo);
         App.admin.applyAdminBrand(s.restaurant_name,s.restaurant_logo);
         App.state._storeLogoB64=null;
@@ -4154,11 +4319,20 @@ var App={
       setVal('n-line-target-id',s.notification_line_target_id||'');
       setVal('n-telegram-token',s.notification_telegram_bot_token_masked||'');
       setVal('n-telegram-chat-id',s.notification_telegram_chat_id||'');
+      setChecked('n-include-admin-link',s.notification_include_admin_link);
+      setVal('n-admin-link-url',s.notification_admin_url||'');
       App.admin.toggleNotificationChannel('line');
       App.admin.toggleNotificationChannel('telegram');
+      App.admin.toggleNotificationAdminLink();
       App.admin.updateNotificationStatusBadges();
       var ls=document.getElementById('line-test-status');if(ls){ls.textContent='';ls.style.color='';}
       var ts=document.getElementById('telegram-test-status');if(ts){ts.textContent='';ts.style.color='';}
+    },
+    toggleNotificationAdminLink:function(){
+      var wrap=document.getElementById('n-admin-link-url-wrap');
+      var tog=document.getElementById('n-include-admin-link');
+      if(!wrap||!tog)return;
+      wrap.classList.toggle('hidden',!tog.checked);
     },
     loadNotifications:function(force){
       var cached=!force?App.admin._getCache('notification_settings',45000):null;
@@ -4333,6 +4507,10 @@ var App={
         if(!tgChat)return 'กรุณากรอก Telegram Chat ID';
         if(!/^-?\d+$/.test(tgChat))return 'Telegram Chat ID ต้องเป็นตัวเลข เช่น 123456 หรือ -1001234567890';
       }
+      if(String(data.notification_include_admin_link||'0')==='1'){
+        var adminUrl=String(data.notification_admin_url||'').trim();
+        if(adminUrl&&!/^https:\/\//i.test(adminUrl))return 'ลิงก์หน้าแอดมินต้องขึ้นต้นด้วย https://';
+      }
       return '';
     },
     _collectNotificationData:function(){
@@ -4345,7 +4523,9 @@ var App={
         notification_line_target_id:gv('n-line-target-id'),
         notification_telegram_enabled:gc('n-telegram-enabled')?'1':'0',
         notification_telegram_bot_token:gv('n-telegram-token'),
-        notification_telegram_chat_id:gv('n-telegram-chat-id')
+        notification_telegram_chat_id:gv('n-telegram-chat-id'),
+        notification_include_admin_link:gc('n-include-admin-link')?'1':'0',
+        notification_admin_url:gv('n-admin-link-url')
       };
     },
     saveNotificationSettings:function(){
@@ -4353,6 +4533,9 @@ var App={
       var data=App.admin._collectNotificationData();
       var errMsg=App.admin._validateNotificationData(data,{forTest:false});
       if(errMsg){App.ui.toast(errMsg,'error');return;}
+      if(String(data.notification_include_admin_link||'0')==='1'&&!String(data.notification_admin_url||'').trim()){
+        App.ui.toast('เปิดแนบลิงก์แอดมินอยู่ แต่ยังไม่ได้กรอก URL ระบบจะไม่แนบลิงก์จนกว่าจะกรอก','warn',{duration:7000,closeButton:true});
+      }
       App.u.btnAction({
         debounceKey:'save_notify_settings',debounceMs:1800,
         btnId:'save-notification-btn',loadingText:'⏳ กำลังบันทึก...',successText:'บันทึกการตั้งค่าแจ้งเตือน',
@@ -4369,6 +4552,9 @@ var App={
       if(!App.admin.ensureCanEdit())return;
       var data=App.admin._collectNotificationData();
       data.notification_line_enabled='1';
+      if(String(data.notification_include_admin_link||'0')==='1'&&!String(data.notification_admin_url||'').trim()){
+        App.ui.toast('เปิดแนบลิงก์แอดมินอยู่ แต่ยังไม่ได้กรอก URL ข้อความทดสอบจะไม่แนบลิงก์','warn',{duration:7000,closeButton:true});
+      }
       var em=App.admin._validateNotificationData(data,{forTest:true,only:'line'});
       if(em){App.admin._setNotifyStatus('line-test-status','❌ '+em,'error');return;}
       App.admin._setNotifyStatus('line-test-status','กำลังทดสอบส่ง LINE...','info');
@@ -4388,6 +4574,9 @@ var App={
       if(!App.admin.ensureCanEdit())return;
       var data=App.admin._collectNotificationData();
       data.notification_telegram_enabled='1';
+      if(String(data.notification_include_admin_link||'0')==='1'&&!String(data.notification_admin_url||'').trim()){
+        App.ui.toast('เปิดแนบลิงก์แอดมินอยู่ แต่ยังไม่ได้กรอก URL ข้อความทดสอบจะไม่แนบลิงก์','warn',{duration:7000,closeButton:true});
+      }
       var em=App.admin._validateNotificationData(data,{forTest:true,only:'telegram'});
       if(em){App.admin._setNotifyStatus('telegram-test-status','❌ '+em,'error');return;}
       App.admin._setNotifyStatus('telegram-test-status','กำลังทดสอบส่ง Telegram...','info');
@@ -4496,6 +4685,7 @@ var App={
       var driveEl=document.getElementById('s-drive');
       var folderId=driveEl?App.admin._normalizeGoogleDriveFolderInput(driveEl):'';
       App.admin._setApiCheckStatus('api-drive-status','กำลังตรวจสอบ Google Drive...','info');
+      App.admin.refreshDriveStatus('checking',{message:'กำลังตรวจสอบสิทธิ์และการเข้าถึง...'});
       var btn=document.getElementById('btn-test-drive');
       if(btn)App.ui.setBtn(btn,true,'⏳ กำลังตรวจสอบ...');
       App.api.call('testGoogleDriveConnection',[{folderId:folderId},App.state.adminToken],function(res){
@@ -4505,11 +4695,15 @@ var App={
           var data=res.data||{};
           var m=data.message||'เชื่อมต่อ Google Drive สำเร็จ';
           App.admin._setApiCheckStatus('api-drive-status','✅ '+m,'success');
-          App.admin._showDriveEditorReminder();
+          App.admin.refreshDriveStatus('ready',{folderId:String(data.folderId||folderId||''),folderName:String(data.folderName||''),message:m});
+          App.ui.toast(m,'success',{duration:3200});
           return;
         }
-        App.admin._setApiCheckStatus('api-drive-status','❌ '+String((res&&res.message)||'ตรวจสอบไม่สำเร็จ'),'error');
-        App.admin._showDriveEditorReminder();
+        var em=String((res&&res.message)||'ตรวจสอบไม่สำเร็จ');
+        var needAuth=/auth|permission|สิทธิ์|authorize/i.test(em);
+        App.admin._setApiCheckStatus('api-drive-status','❌ '+em,'error');
+        App.admin.refreshDriveStatus(needAuth?'need_auth':'error',{message:em});
+        App.ui.toast(em,'error',{duration:9000,closeButton:true});
       },{silent:true});
     },
     saveSettings(){
@@ -6939,6 +7133,31 @@ var App={
       App.customer.refreshShopAvailability();
       App.customer.startShopAvailabilityPoll();
       App.ui.nav('menu');
+    }
+    document.querySelectorAll('.admin-modal').forEach(function(modal){
+      if(modal._overlayCloseBound)return;
+      modal.addEventListener('click',function(ev){
+        if(ev.target!==modal)return;
+        App.admin.closeAdminModal(modal.id);
+      });
+      modal._overlayCloseBound=true;
+    });
+    if(!document.body._adminEscBound){
+      document.addEventListener('keydown',function(ev){
+        if(ev.key!=='Escape')return;
+        var crop=document.getElementById('crop-modal');
+        if(crop&&crop.style.display==='flex'){App.admin.closeCropModal();return;}
+        var active=document.querySelector('.admin-modal.active');
+        if(active)App.admin.closeAdminModal(active.id);
+      });
+      document.body._adminEscBound=true;
+    }
+    var cropModal=document.getElementById('crop-modal');
+    if(cropModal&&!cropModal._overlayCloseBound){
+      cropModal.addEventListener('click',function(ev){
+        if(ev.target===cropModal)App.admin.closeCropModal();
+      });
+      cropModal._overlayCloseBound=true;
     }
   }
 };

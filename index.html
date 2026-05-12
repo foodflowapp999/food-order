@@ -521,7 +521,7 @@
         <div class="notify-footer-actions">
           <div style="margin-right:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <label class="toggle-switch">
-              <input type="checkbox" id="n-include-admin-link">
+              <input type="checkbox" id="n-include-admin-link" onchange="App.admin.toggleNotificationAdminLink()">
               <span class="toggle-slider"></span>
             </label>
             <div class="text-xs text-muted">
@@ -530,6 +530,11 @@
             </div>
           </div>
           <button id="save-notification-btn" class="btn btn-primary" style="width:auto;min-width:190px" onclick="App.admin.saveNotificationSettings()">บันทึกการตั้งค่าแจ้งเตือน</button>
+        </div>
+        <div id="n-admin-link-url-wrap" class="form-group hidden" style="margin-top:10px">
+          <label class="form-label">ลิงก์หน้าแอดมิน / GitHub Pages URL</label>
+          <input id="n-admin-link-url" type="url" class="form-input" placeholder="https://foodflowapp999.github.io/food-order/?admin=1">
+          <div class="text-xs text-muted" style="margin-top:4px">ต้องเป็น URL ที่ขึ้นต้นด้วย https:// เท่านั้น</div>
         </div>
         <div class="text-xs text-muted" style="margin-top:4px">ระบบจะพยายามส่งซ้ำอัตโนมัติหากล้มเหลว</div>
       </div>
@@ -683,41 +688,37 @@
           <!-- TAB: Google Drive -->
           <div id="stab-drive" class="stab-panel">
             <div class="card p-4" style="margin-bottom:14px">
-              <h3 style="font-weight:700;margin-bottom:14px;font-size:15px">📁 Google Drive</h3>
+              <h3 style="font-weight:700;margin-bottom:14px;font-size:15px">📁 Google Drive Center</h3>
               <div class="drive-folder-status-card">
-                <div class="text-sm" style="font-weight:700;margin-bottom:4px">สถานะโฟลเดอร์รูปเมนู</div>
-                <div id="api-drive-folder-status" class="text-xs text-muted" style="line-height:1.5">ยังไม่ได้สร้างโฟลเดอร์</div>
+                <div class="text-sm" style="font-weight:700;margin-bottom:4px">สถานะการเชื่อมต่อ</div>
+                <div id="api-drive-folder-status" class="drive-status-text is-idle">ยังไม่ได้ตั้งค่า</div>
                 <div id="api-drive-folder-meta" class="text-xs text-muted" style="margin-top:6px;line-height:1.5"></div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-                  <button id="btn-copy-drive-id" class="btn btn-ghost" style="width:auto;padding:6px 12px;font-size:12px" onclick="App.admin.copyDriveFolderId()">คัดลอก Folder ID</button>
-                  <a id="btn-open-drive-folder" class="btn btn-secondary" style="display:none;width:auto;padding:6px 12px;font-size:12px" target="_blank" rel="noopener">เปิดโฟลเดอร์ใน Google Drive</a>
-                </div>
               </div>
-              <div class="form-group" style="margin-top:10px"><label class="form-label">ชื่อโฟลเดอร์ (อัตโนมัติ)</label><input id="s-drive-folder-name" type="text" class="form-input" value="FoodOrder Menu Images" placeholder="FoodOrder Menu Images"></div>
+              <div class="form-group" style="margin-top:10px"><label class="form-label">ชื่อโฟลเดอร์ (สร้างอัตโนมัติ)</label><input id="s-drive-folder-name" type="text" class="form-input" value="FoodFlow/Menu Images" placeholder="FoodFlow/Menu Images"></div>
               <div class="text-xs text-muted" style="margin-top:-2px;margin-bottom:8px;line-height:1.5">
-                ระบบจะสร้างโฟลเดอร์ใน Google Drive ของบัญชีที่ Deploy Web App และบันทึก Folder ID ให้อัตโนมัติ
+                แนะนำให้กด “สร้าง/เชื่อมต่อโฟลเดอร์อัตโนมัติ” ระบบจะบันทึก Folder ID ให้อัตโนมัติ
               </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                <button id="btn-create-drive-folder" class="btn btn-primary" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.createMenuImageFolder()">สร้างโฟลเดอร์อัตโนมัติ</button>
+              <div class="drive-center-actions">
+                <button id="btn-create-drive-folder" class="btn btn-primary" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.createMenuImageFolder()">สร้าง/เชื่อมต่อโฟลเดอร์อัตโนมัติ</button>
                 <button id="btn-test-drive" class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.testGoogleDriveConnection()">ตรวจสอบ Google Drive</button>
-                <span id="api-drive-status" class="text-sm text-muted">ยังไม่ได้ตรวจสอบ</span>
+                <button id="btn-open-drive-folder" class="btn btn-secondary" type="button" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.openDriveFolder()">เปิดโฟลเดอร์</button>
+                <button id="btn-copy-drive-id" class="btn btn-ghost" type="button" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.copyDriveFolderId()">คัดลอก Folder ID</button>
               </div>
+              <span id="api-drive-status" class="text-sm text-muted">ยังไม่ได้ตรวจสอบ</span>
               <div style="margin-top:10px">
-                <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 12px;font-size:12px" onclick="App.admin.toggleDriveAdvancedSettings()">ตั้งค่าขั้นสูง</button>
+                <button class="btn btn-ghost" type="button" style="width:auto;padding:6px 12px;font-size:12px" onclick="App.admin.toggleDriveAdvanced()">ขั้นสูง / Legacy</button>
               </div>
               <div id="drive-advanced-panel" class="drive-advanced-panel">
                 <div class="form-group" style="margin-top:8px">
-                  <label class="form-label">Folder ID (ขั้นสูง)</label>
+                  <label class="form-label">Folder ID (ขั้นสูง - readonly)</label>
                   <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <input id="s-drive" type="text" class="form-input" readonly placeholder="ระบบจะบันทึกให้อัตโนมัติ">
                     <button id="btn-drive-manual-edit" class="btn btn-ghost" type="button" style="width:auto;padding:6px 12px;font-size:12px" onclick="App.admin.enableManualDriveFolderEdit()">แก้ไขเอง</button>
                   </div>
                 </div>
               </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-                <button id="save-settings-api-btn" class="btn btn-primary" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.saveSettingsTab('api')">บันทึก API</button>
-              </div>
-              <div class="drive-migrate-card" style="margin-top:12px">
+              <details class="drive-migrate-card drive-migrate-advanced" style="margin-top:12px">
+                <summary class="text-sm" style="font-weight:700;cursor:pointer">เครื่องมือย้ายรูปเดิม (Advanced)</summary>
                 <div class="text-sm" style="font-weight:700">ย้ายรูปเมนูเดิมเข้า Google Drive</div>
                 <div class="text-xs text-muted" style="line-height:1.5;margin-top:4px">
                   ระบบจะคัดลอกรูปเมนูเดิมจาก Sheet/URL/Drive เดิม ไปยังโฟลเดอร์ Google Drive ใหม่ แล้วอัปเดตลิงก์รูปในเมนูให้อัตโนมัติ
@@ -750,7 +751,7 @@
                   </div>
                   <div id="menu-image-rollback-summary" class="text-xs text-muted" style="margin-top:8px"></div>
                 </details>
-              </div>
+              </details>
             </div>
           </div>
 

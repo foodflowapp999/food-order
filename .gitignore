@@ -1,0 +1,14 @@
+﻿.clasp.json
+.clasprc.json
+.env
+.env.*
+credentials*.json
+service-account*.json
+token*.json
+secrets.*
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+Thumbs.db

@@ -1811,7 +1811,15 @@ var App={
       if(tabId==='stab-drive'){
         App.admin.refreshDriveStatus();
       }
-      if(tabId==='stab-logs')App.admin.loadActivityLogs();
+      if(tabId==='stab-logs'){
+        var now=Date.now();
+        var last=App.admin._lastLogsCleanupAt||0;
+        if(now-last>10*60*1000){
+          App.admin._lastLogsCleanupAt=now;
+          App.api.call('cleanupLogs',[App.state.adminToken],function(){},{silent:true,noLoader:true});
+        }
+        App.admin.loadActivityLogs(true);
+      }
     },
     _toggleCustomPaperField:function(selectId,inputWrapId){
       var selectEl=document.getElementById(selectId),wrap=document.getElementById(inputWrapId);
@@ -2592,7 +2600,7 @@ var App={
       var btn=document.querySelector('.admin-mode-toggle');
       if(btn)btn.textContent=App.state._adminLight?'🌙 Dark':'☀️ Light';
     },
-    loadPage(page){var map={menu:App.admin.loadMenu,topics:App.admin.loadTopics,promotions:App.admin.loadPromos,printing:App.admin.loadPrinting,notifications:App.admin.loadNotifications,settings:App.admin.loadSettings,orders:App.admin.loadOrders};if(map[page])map[page]();},
+    loadPage(page){var map={menu:App.admin.loadMenu,topics:App.admin.loadTopics,promotions:App.admin.loadPromos,printing:App.admin.loadPrinting,notifications:App.admin.loadNotifications,settings:App.admin.loadSettings,orders:App.admin.loadOrders,logs:function(){App.admin.loadActivityLogs(true);}};if(map[page])map[page]();},
     loadPrinting:function(){
       App.admin._printingBusy=false;
       App.admin.printing.init();
@@ -4609,33 +4617,104 @@ var App={
         App.admin._setNotifyStatus('line-test-status','✅ ดึง Group ID ล่าสุดสำเร็จและเติม Target ID แล้ว','success');
       },{silent:true});
     },
+    _logsState:{page:1,pageSize:30,hasMore:false,loading:false,items:[]},
+    _getLogsFilters:function(){
+      var getVal=function(id){var el=document.getElementById(id);return el?String(el.value||'').trim():'';};
+      return {
+        dateFrom:getVal('logs-date-from'),
+        dateTo:getVal('logs-date-to'),
+        module:getVal('logs-module'),
+        level:getVal('logs-level'),
+        status:getVal('logs-status'),
+        search:getVal('logs-search')
+      };
+    },
+    onLogsFilterInput:function(){
+      if(App.admin._logsFilterTimer)clearTimeout(App.admin._logsFilterTimer);
+      App.admin._logsFilterTimer=setTimeout(function(){App.admin.loadActivityLogs(true);},260);
+    },
+    loadMoreLogs:function(){
+      var st=App.admin._logsState||{};
+      if(!st.hasMore||st.loading)return;
+      st.page=(parseInt(st.page||1,10)||1)+1;
+      App.admin._fetchLogsPage(false);
+    },
+    cleanupLogs:function(){
+      if(!App.admin.ensureCanEdit())return;
+      App.api.call('cleanupLogs',[App.state.adminToken],function(res){
+        if(App.admin._auth(res))return;
+        if(!res||!res.success){
+          App.ui.toast((res&&res.message)||'ล้าง Logs ไม่สำเร็จ','error',{duration:6500,closeButton:true});
+          return;
+        }
+        var deleted=(res.data&&res.data.deleted)||0;
+        App.ui.toast('ล้าง Logs เก่าแล้ว '+deleted+' รายการ','success',{duration:1800});
+        App.admin.loadActivityLogs(true);
+      },{silent:true,noLoader:true});
+    },
+    _fetchLogsPage:function(reset){
+      var st=App.admin._logsState||{};
+      if(st.loading)return;
+      st.loading=true;
+      var btn=document.getElementById('logs-load-more-btn');
+      if(btn)App.ui.setBtn(btn,true,'⏳ กำลังโหลด...');
+      var filters=App.admin._getLogsFilters();
+      App.api.call('getLogs',[Object.assign({},filters,{page:st.page||1,pageSize:st.pageSize||30}),App.state.adminToken],function(res){
+        st.loading=false;
+        if(btn)App.ui.setBtn(btn,false,'โหลดเพิ่ม');
+        if(App.admin._auth(res))return;
+        if(!res||!res.success){
+          App.ui.toast((res&&res.message)||'โหลด Logs ไม่สำเร็จ','error',{duration:6500,closeButton:true});
+          return;
+        }
+        var data=res.data||{};
+        var items=Array.isArray(data.items)?data.items:[];
+        st.hasMore=!!data.hasMore;
+        st.page=parseInt(data.page||st.page||1,10)||1;
+        st.items=reset?items:(st.items||[]).concat(items);
+        App.admin._renderActivityLogs(st.items);
+        if(btn)btn.style.display=st.hasMore?'':'none';
+      },{silent:true,noLoader:true,key:'logs_lite'});
+    },
     loadActivityLogs:function(force){
-      var cached=!force?App.admin._getCache('logs',15000):null;
-      if(cached){
-        App.admin._renderActivityLogs(cached);
+      var st=App.admin._logsState||{};
+      if(force){
+        st.page=1;
+        st.items=[];
+        st.hasMore=false;
+      }
+      if(!st.items||!st.items.length||force){
+        App.admin._fetchLogsPage(true);
         return;
       }
-      App.api.call('getActivityLogs',[App.state.adminToken,300],function(res){
-        if(App.admin._auth(res))return;
-        var logs=(res&&res.success&&Array.isArray(res.data))?res.data:[];
-        App.admin._setCache('logs',logs);
-        App.admin._renderActivityLogs(logs);
-      },{key:'activity_logs',loaderText:'กำลังโหลด Activity Logs...',silent:true,noLoader:true});
+      App.admin._renderActivityLogs(st.items);
     },
     _renderActivityLogs:function(logs){
       var tb=document.getElementById('activity-log-table');if(!tb)return;
-      if(!logs||!logs.length){tb.innerHTML='<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text2)">ยังไม่มีข้อมูล</td></tr>';return;}
+      if(!logs||!logs.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text2)">ยังไม่มีข้อมูล</td></tr>';return;}
       var e=App.u.esc;
+      var levelClass=function(level){
+        var l=String(level||'').toUpperCase();
+        if(l==='ERROR')return 'log-level-error';
+        if(l==='WARN')return 'log-level-warn';
+        if(l==='SECURITY')return 'log-level-security';
+        return 'log-level-info';
+      };
       tb.innerHTML=logs.map(function(x){
-        var dt=x&&x.created_at?new Date(x.created_at):null;
+        var dt=x&&(x.timestamp||x.created_at)?new Date(x.timestamp||x.created_at):null;
         var dtx=(dt&&!isNaN(dt.getTime()))?dt.toLocaleString('th-TH'):'-';
-        var actor=String(x&&x.actor||'-');
-        var msg=String(x&&x.message||'').replace(/\[[^\]]*\]\s*/g,'').trim();
-        var detail=msg||'-';
+        var lv=String(x&&x.level||'INFO').toUpperCase();
+        var mod=String(x&&x.module||'-');
+        var action=String(x&&x.action||'-');
+        var st=String(x&&x.status||'-');
+        var msg=String(x&&x.message||'').replace(/\[[^\]]*\]\s*/g,'').trim()||'-';
         return '<tr>'
           +'<td>'+e(dtx)+'</td>'
-          +'<td>'+e(actor)+'</td>'
-          +'<td>'+e(detail)+'</td>'
+          +'<td><span class="log-level-badge '+levelClass(lv)+'">'+e(lv)+'</span></td>'
+          +'<td>'+e(mod)+'</td>'
+          +'<td>'+e(action)+'</td>'
+          +'<td>'+e(st)+'</td>'
+          +'<td>'+e(msg)+'</td>'
         +'</tr>';
       }).join('');
     },

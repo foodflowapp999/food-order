@@ -716,13 +716,52 @@
             <div class="card p-4" style="margin-bottom:14px">
               <div class="section-header" style="margin-bottom:10px">
                 <h3 style="font-weight:700;font-size:15px">📝 Activity Logs</h3>
-                <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.loadActivityLogs()">รีเฟรช</button>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.loadActivityLogs(true)">รีเฟรช</button>
+                  <button class="btn btn-ghost" style="width:auto;padding:8px 14px;font-size:13px" onclick="App.admin.cleanupLogs()">ล้าง Logs เก่า</button>
+                </div>
+              </div>
+              <div class="grid two" style="gap:8px;margin-bottom:10px">
+                <input id="logs-date-from" type="date" class="form-input" onchange="App.admin.loadActivityLogs(true)">
+                <input id="logs-date-to" type="date" class="form-input" onchange="App.admin.loadActivityLogs(true)">
+              </div>
+              <div class="grid two" style="gap:8px;margin-bottom:10px">
+                <select id="logs-module" class="form-input" onchange="App.admin.loadActivityLogs(true)">
+                  <option value="">ทุกหมวด</option>
+                  <option value="auth">auth</option>
+                  <option value="menu">menu</option>
+                  <option value="orders">orders</option>
+                  <option value="payment">payment</option>
+                  <option value="drive">drive</option>
+                  <option value="notification">notification</option>
+                  <option value="slipok">slipok</option>
+                  <option value="settings">settings</option>
+                </select>
+                <select id="logs-level" class="form-input" onchange="App.admin.loadActivityLogs(true)">
+                  <option value="">ทุกระดับ</option>
+                  <option value="ERROR">ERROR</option>
+                  <option value="WARN">WARN</option>
+                  <option value="INFO">INFO</option>
+                  <option value="SECURITY">SECURITY</option>
+                </select>
+              </div>
+              <div class="grid two" style="gap:8px;margin-bottom:10px">
+                <select id="logs-status" class="form-input" onchange="App.admin.loadActivityLogs(true)">
+                  <option value="">ทุกสถานะ</option>
+                  <option value="success">success</option>
+                  <option value="failed">failed</option>
+                  <option value="error">error</option>
+                </select>
+                <input id="logs-search" type="text" class="form-input" placeholder="ค้นหา module/action/message" oninput="App.admin.onLogsFilterInput()">
               </div>
               <div class="table-wrap logs-table-wrap">
                 <table>
-                  <thead><tr><th>เวลา</th><th>ผู้ใช้</th><th>รายละเอียด</th></tr></thead>
+                  <thead><tr><th>เวลา</th><th>level</th><th>module</th><th>action</th><th>status</th><th>message</th></tr></thead>
                   <tbody id="activity-log-table"></tbody>
                 </table>
+              </div>
+              <div style="display:flex;justify-content:center;margin-top:10px">
+                <button id="logs-load-more-btn" class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:13px;display:none" onclick="App.admin.loadMoreLogs()">โหลดเพิ่ม</button>
               </div>
             </div>
           </div>

@@ -619,15 +619,17 @@ var App={
     },
     loadMenu(){
       var grid=document.getElementById('menu-grid');if(!grid)return;
-      grid.innerHTML=App.customer.skelHtml();
+      var hadCached=false;
       var renderMenuNow=function(){if(App.state.page==='menu')App.customer.renderMenuVirtual(App.state.menu||[]);};
       try{
         var cachedObj=App.customer._readBootstrapCache();
         if(cachedObj&&cachedObj.data){
           App.customer._applyBootstrapData(cachedObj.data||{});
           renderMenuNow();
+          hadCached=true;
         }
       }catch(_){App.customer._clearBootstrapCache();}
+      if(!hadCached)grid.innerHTML=App.customer.skelHtml();
       App.api.call('getInitialData',[null],function(res){
         var fallback=function(){
           App.api.call('getMenu',[],function(menuRes){
@@ -650,7 +652,7 @@ var App={
         App.customer._applyBootstrapData(d);
         renderMenuNow();
         App.customer._writeBootstrapCache(d);
-      },{key:'menu'});
+      },{key:'menu',silent:true,noLoader:true});
     },
     applyInitialSettings:function(s){
       if(!s)return;
@@ -3648,26 +3650,24 @@ var App={
         App.admin.renderCategorySuggestions();
         App.admin.renderMenuFilters();
         App.admin.renderMenuPaged(true);
-      }else{
-        App.api.call('adminCRUDMenu',['getAll',{},App.state.adminToken],function(res){
-          if(App.admin._auth(res))return;if(!res||!res.success)return;
-          App.state.adminMenuItems=Array.isArray(res.data)?res.data:(res.data&&res.data.items?res.data.items:[]);
-          App.admin._menuStockFp=App.admin._menuFingerprint(App.state.adminMenuItems);
-          App.admin._setCache('menu',App.state.adminMenuItems.slice());
-          App.admin.renderCategorySuggestions();
-          App.admin.renderMenuFilters();
-          App.admin.renderMenuPaged(true);
-        },{key:'amenu'});
       }
+      App.api.call('adminCRUDMenu',['getAll',{},App.state.adminToken],function(res){
+        if(App.admin._auth(res))return;if(!res||!res.success)return;
+        App.state.adminMenuItems=Array.isArray(res.data)?res.data:(res.data&&res.data.items?res.data.items:[]);
+        App.admin._menuStockFp=App.admin._menuFingerprint(App.state.adminMenuItems);
+        App.admin._setCache('menu',App.state.adminMenuItems.slice());
+        App.admin.renderCategorySuggestions();
+        App.admin.renderMenuFilters();
+        App.admin.renderMenuPaged(true);
+      },{key:'amenu',silent:true,noLoader:true});
       var cachedTopics=App.admin._getCache('topics',30000);
       if(cachedTopics){
         App.state.adminTopics=Array.isArray(cachedTopics)?cachedTopics:[];
-      }else{
-        App.api.call('adminCRUDOption',['getAll',{},App.state.adminToken],function(res){
-          App.state.adminTopics=Array.isArray(res&&res.data)?res.data:[];
-          App.admin._setCache('topics',App.state.adminTopics.slice());
-        },{silent:true});
       }
+      App.api.call('adminCRUDOption',['getAll',{},App.state.adminToken],function(res){
+        App.state.adminTopics=Array.isArray(res&&res.data)?res.data:[];
+        App.admin._setCache('topics',App.state.adminTopics.slice());
+      },{silent:true,noLoader:true,key:'atopic_for_menu'});
       App.admin._startMenuLiveRefresh();
     },
     renderCategorySuggestions:function(){
@@ -4118,14 +4118,17 @@ var App={
       if(cached){
         App.state.adminTopics=Array.isArray(cached)?cached:[];
         App.admin.renderTopicsList(App.state.adminTopics);
-        return;
+      }
+      else{
+        var container=document.getElementById('topics-list');
+        if(container)container.innerHTML='<div class="empty-state"><div class="icon">🏷</div><h3>กำลังโหลดหัวข้อ...</h3></div>';
       }
       App.api.call('adminCRUDOption',['getAll',{},App.state.adminToken],function(res){
         if(App.admin._auth(res))return;if(!res||!res.success)return;
         App.state.adminTopics=Array.isArray(res.data)?res.data:[];
         App.admin._setCache('topics',App.state.adminTopics.slice());
         App.admin.renderTopicsList(App.state.adminTopics);
-      });
+      },{silent:true,noLoader:true,key:'atopics'});
     },
     renderTopicsList(topics){
       var container=document.getElementById('topics-list');if(!container)return;
@@ -4182,20 +4185,19 @@ var App={
     // PROMOS
     loadPromos(){
       var tb=document.getElementById('promo-table');
-      if(tb)tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text2)">กำลังโหลดโปรโมชัน...</td></tr>';
       var cached=App.admin._getCache('promos',30000);
       if(cached){
         App.state.adminPromos=Array.isArray(cached)?cached:[];
         App.admin.renderPromoTable();
-      }else{
-        App.api.call('adminCRUDPromotion',['getAll',{},App.state.adminToken],function(res){
-          if(App.admin._auth(res))return;if(!res||!res.success)return;
-          App.state.adminPromos=Array.isArray(res.data)?res.data:[];
-          App.admin._setCache('promos',App.state.adminPromos.slice());
-          App.admin.renderPromoTable();
-        });
-        return;
+      }else if(tb){
+        tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text2)">กำลังโหลดโปรโมชัน...</td></tr>';
       }
+      App.api.call('adminCRUDPromotion',['getAll',{},App.state.adminToken],function(res){
+        if(App.admin._auth(res))return;if(!res||!res.success)return;
+        App.state.adminPromos=Array.isArray(res.data)?res.data:[];
+        App.admin._setCache('promos',App.state.adminPromos.slice());
+        App.admin.renderPromoTable();
+      },{silent:true,noLoader:true,key:'apromos'});
     },
     renderPromoTable:function(){
       var tb=document.getElementById('promo-table'),e=App.u.esc;
@@ -4244,16 +4246,14 @@ var App={
       var cached=!force?App.admin._getCache('users',30000):null;
       if(cached){
         App.state.adminUsers=Array.isArray(cached)?cached:[];
-      }else{
-        App.api.call('getUsers',[App.state.adminToken],function(res){
-          if(App.admin._auth(res))return;if(!res||!res.success)return;
-          App.state.adminUsers=res.data||[];
-          App.admin._setCache('users',(App.state.adminUsers||[]).slice());
-          App.admin._renderUsersTable();
-        });
-        return;
       }
       App.admin._renderUsersTable();
+      App.api.call('getUsers',[App.state.adminToken],function(res){
+        if(App.admin._auth(res))return;if(!res||!res.success)return;
+        App.state.adminUsers=res.data||[];
+        App.admin._setCache('users',(App.state.adminUsers||[]).slice());
+        App.admin._renderUsersTable();
+      },{silent:true,noLoader:true,key:'ausers'});
     },
     _renderUsersTable:function(){
       var tb=document.getElementById('users-table'),e=App.u.esc;
@@ -4393,13 +4393,13 @@ var App={
         App.admin.applyRolePermissions();
       };
       var cached=!force?App.admin._getCache('settings',45000):null;
-      if(cached){applySettings(cached);return;}
+      if(cached)applySettings(cached);
       App.api.call('getSettings',[App.state.adminToken],function(res){
         if(!res||!res.success)return;
         var s=res.data||{};
         App.admin._setCache('settings',s);
         applySettings(s);
-      });
+      },{silent:true,noLoader:true,key:'asettings'});
     },
     _applyNotificationUi:function(s){
       s=s||{};
@@ -4429,9 +4429,9 @@ var App={
     },
     loadNotifications:function(force){
       var cached=!force?App.admin._getCache('notification_settings',45000):null;
-      if(cached){App.admin._applyNotificationUi(cached);return;}
+      if(cached)App.admin._applyNotificationUi(cached);
       var localCached=!force?App.admin._getNotificationLocalCache(6*60*1000):null;
-      if(localCached){
+      if(localCached&&!cached){
         // PERF: paint notification form immediately from local cache while background refresh is running
         App.admin._setCache('notification_settings',localCached);
         App.admin._applyNotificationUi(localCached);

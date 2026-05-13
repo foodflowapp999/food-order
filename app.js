@@ -54,6 +54,29 @@ var App={
   u:{
     debounce(key,ms){ms=ms||800;if(App.state._actionBusy[key])return true;App.state._actionBusy[key]=true;setTimeout(function(){delete App.state._actionBusy[key];},ms);return false;},
     esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');},
+    extractDriveFileId(v){
+      var s=String(v==null?'':v).trim();
+      if(!s)return '';
+      if(/^[a-zA-Z0-9_-]{20,}$/.test(s))return s;
+      var m=s.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/i);if(m&&m[1])return m[1];
+      m=s.match(/[?&]id=([a-zA-Z0-9_-]{20,})/i);if(m&&m[1])return m[1];
+      m=s.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]{20,})/i);if(m&&m[1])return m[1];
+      return '';
+    },
+    resolveImageUrl(v){
+      var s=String(v==null?'':v).trim();
+      if(!s)return '';
+      if(/^data:image\//i.test(s)||/^blob:/i.test(s)||/^https?:\/\//i.test(s)||/^\/\//.test(s)){
+        var directId=App.u.extractDriveFileId(s);
+        if(directId&&( /drive\.google\.com/i.test(s) || /lh3\.googleusercontent\.com/i.test(s) )){
+          return 'https://drive.google.com/thumbnail?id='+directId+'&sz=w1600';
+        }
+        return s;
+      }
+      var id=App.u.extractDriveFileId(s);
+      if(id)return 'https://drive.google.com/thumbnail?id='+id+'&sz=w1600';
+      return s;
+    },
     fmt(n){return '฿'+Math.round(toNum(n)).toLocaleString('th-TH');},
     formatDateTimeTH(raw){
       if(!raw)return '-';
@@ -880,12 +903,13 @@ var App={
         soldBadge.textContent='หมด';
         imgWrap.appendChild(soldBadge);
       }
-      if(m.image){
+      var menuImgUrl=App.u.resolveImageUrl(m.image);
+      if(menuImgUrl){
         var img=document.createElement('img');
         img.loading='lazy';
         img.decoding='async';
         img.alt=String(m.name||'');
-        img.dataset.src=String(m.image||'');
+        img.dataset.src=menuImgUrl;
         img.onerror=function(){this.style.display='none';};
         imgWrap.appendChild(img);
         App.customer._observeMenuImage(img);
@@ -1026,7 +1050,8 @@ var App={
       });
       var emoji=item.category==='เครื่องดื่ม'?'🥤':item.category==='อาหาร'?'🍛':'🍱';
       var body=document.getElementById('modal-body');if(!body)return;
-      body.innerHTML=(item.image?'<div class="modal-img-wrap"><img src="'+e(item.image)+'" onerror="this.style.display=\'none\'"></div>':'<div style="font-size:64px;text-align:center;padding:24px;background:var(--surface);">'+emoji+'</div>')+optHtml+'<div class="qty-control mt-3"><button class="qty-btn" onclick="App.customer.changeQty(-1)">−</button><span id="modal-qty" style="font-size:18px;font-weight:700;min-width:28px;text-align:center">1</span><button class="qty-btn" onclick="App.customer.changeQty(1)">+</button><span style="margin-left:auto;font-size:14px;color:var(--text2)">รวม: <strong id="modal-sub">'+App.u.fmt(item.price)+'</strong></span></div>';
+      var modalImg=App.u.resolveImageUrl(item.image||'');
+      body.innerHTML=(modalImg?'<div class="modal-img-wrap"><img src="'+e(modalImg)+'" onerror="this.style.display=\'none\'"></div>':'<div style="font-size:64px;text-align:center;padding:24px;background:var(--surface);">'+emoji+'</div>')+optHtml+'<div class="qty-control mt-3"><button class="qty-btn" onclick="App.customer.changeQty(-1)">−</button><span id="modal-qty" style="font-size:18px;font-weight:700;min-width:28px;text-align:center">1</span><button class="qty-btn" onclick="App.customer.changeQty(1)">+</button><span style="margin-left:auto;font-size:14px;color:var(--text2)">รวม: <strong id="modal-sub">'+App.u.fmt(item.price)+'</strong></span></div>';
       var tt=document.getElementById('modal-title'),tp=document.getElementById('modal-price');
       if(tt)tt.textContent=item.name;if(tp)tp.textContent=App.u.fmt(item.price);
       document.getElementById('item-modal').classList.add('active');
@@ -1062,7 +1087,7 @@ var App={
       var optKey=flatChoices.map(function(c){return c.label;}).sort().join(',');
       var xi=App.state.cart.findIndex(function(ci){return String(ci.menuId)===String(s.item.id)&&ci._optKey===optKey;});
       if(xi>-1)App.state.cart[xi].qty=Math.min(99,App.state.cart[xi].qty+s.qty);
-      else App.state.cart.push({menuId:s.item.id,name:s.item.name,image:s.item.image||'',price:price,options:flatChoices,qty:s.qty,_optKey:optKey});
+      else App.state.cart.push({menuId:s.item.id,name:s.item.name,image:App.u.resolveImageUrl(s.item.image||''),price:price,options:flatChoices,qty:s.qty,_optKey:optKey});
       App.customer.calcPromo();App.customer.updateBadge();App.customer.saveCartLocal();App.customer.closeModal();
       App.ui.toast(s.item.name+' เพิ่มแล้ว','success');
     },
@@ -1082,7 +1107,7 @@ var App={
       if(!App.state.cart.length){wrap.innerHTML='<div class="empty-state"><div class="icon">🛒</div><h3>ตะกร้าว่าง</h3></div>';if(sw)sw.classList.add('hidden');App.state.promo={discount:0,applied:[]};App.customer.renderSummary();return;}
       if(sw)sw.classList.remove('hidden');var e=App.u.esc;
       wrap.innerHTML=App.state.cart.map(function(ci,idx){
-        var imgHtml=ci.image?'<img src="'+e(ci.image)+'" onerror="this.style.display=\'none\'">':'🍱';
+        var imgHtml=ci.image?'<img src="'+e(App.u.resolveImageUrl(ci.image))+'" onerror="this.style.display=\'none\'">':'🍱';
         return'<div class="cart-item"><div class="cart-item-img">'+imgHtml+'</div><div class="cart-item-info"><div class="cart-item-name">'+e(ci.name)+'</div>'+(ci.options&&ci.options.length?'<div class="cart-item-opts">'+ci.options.map(function(c){return e(c.label||c);}).join(', ')+'</div>':'')
           +'<div class="cart-item-footer"><div style="display:flex;align-items:center;gap:8px"><button class="qty-btn" style="width:28px;height:28px;font-size:14px" onclick="App.customer.cartQty('+idx+',-1)">−</button><span style="font-weight:600;min-width:20px;text-align:center">'+ci.qty+'</span><button class="qty-btn" style="width:28px;height:28px;font-size:14px" onclick="App.customer.cartQty('+idx+',1)">+</button></div><div style="display:flex;align-items:center;gap:4px"><div class="cart-item-price">'+App.u.fmt(ci.price*ci.qty)+'</div><button class="btn-icon" onclick="App.customer.removeItem('+idx+')" style="color:var(--primary)">🗑</button></div></div></div></div>';
       }).join('');App.customer.renderSummary();
@@ -1534,7 +1559,7 @@ var App={
         return{
           menuId:String((i&&i.menuId)||''),
           name:String((i&&i.name)||''),
-          image:String((i&&i.image)||''),
+          image:App.u.resolveImageUrl(String((i&&i.image)||'')),
           price:toNum((i&&i.price)||0),
           options:opts,
           qty:Math.max(1,Math.min(99,parseInt((i&&i.qty)||1,10)||1)),
@@ -3783,7 +3808,7 @@ var App={
             +'<button class="btn btn-secondary menu-order-btn"'+(realIdx===0?' disabled':'')+' onclick="App.admin.moveMenuOrder('+realIdx+',-1)">↑</button>'
             +'<button class="btn btn-secondary menu-order-btn"'+(realIdx===(App.state.adminMenuItems||[]).length-1?' disabled':'')+' onclick="App.admin.moveMenuOrder('+realIdx+',1)">↓</button>'
           +'</div></td>'
-          +'<td><div class="admin-menu-img">'+(m.image?'<img src="'+e(m.image)+'" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'">':'🍱')+'</div></td>'
+          +'<td><div class="admin-menu-img">'+(m.image?'<img src="'+e(App.u.resolveImageUrl(m.image))+'" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'">':'🍱')+'</div></td>'
           +'<td><div style="font-weight:600">'+e(m.name)+'</div><div class="text-sm text-muted">'+e(m.category||'')+'</div></td>'
           +'<td>'+App.u.fmt(m.price)+'</td>'
           +'<td><span class="stock-badge '+stockCls+'">'+e(stockText)+'</span></td>'
@@ -3813,7 +3838,7 @@ var App={
       // reset tabs to URL
       App.admin.switchImgTab('url');
       var fi=document.getElementById('img-preview-final'),pi=document.getElementById('img-preview-img');
-      if(item&&item.image){if(fi)fi.style.display='';if(pi)pi.src=item.image;}else{if(fi)fi.style.display='none';}
+      if(item&&item.image){if(fi)fi.style.display='';if(pi)pi.src=App.u.resolveImageUrl(item.image);}else{if(fi)fi.style.display='none';}
       // โหลด topics แล้ว render selector
       if(!App.state.adminTopics||!App.state.adminTopics.length){
         App.api.call('adminCRUDOption',['getAll',{},App.state.adminToken],function(res){
@@ -3838,7 +3863,7 @@ var App={
       var fi=document.getElementById('img-preview-final'),pi=document.getElementById('img-preview-img');
       if(!url){if(fi)fi.style.display='none';return;}
       if(pi){
-        pi.src=url;
+        pi.src=App.u.resolveImageUrl(url);
         pi.onerror=function(){if(fi)fi.style.display='none';};
         pi.onload=function(){
           App.state._cropSrcUrl=url;App.state._finalImgB64=null;App.state._cropSourceType='url';App.state._cropTarget='menu';
@@ -5583,6 +5608,7 @@ var App={
       var hasLocalCache=!force&&Array.isArray(App.admin._ordersData)&&App.admin._ordersData.length>0;
       if(hasLocalCache){
         App.admin._renderOrders(App.admin._ordersData);
+        App.admin._preloadOrdersItemsNow(App.admin._ordersData);
         App.admin._startOrdersAutoRefresh();
         App.admin._silentRefreshOrders();
         return;
@@ -5615,12 +5641,22 @@ var App={
           // set version baseline จากจำนวน + created_at ล่าสุด
           var d0=App.admin._ordersData;
           App.admin._ordersVersion=String(d0.length)+'_'+(d0.length?String(d0[0].created_at||''):'');
-          App.admin._renderOrders(App.admin._ordersData);App.admin._startOrdersAutoRefresh();
+          App.admin._renderOrders(App.admin._ordersData);
+          App.admin._preloadOrdersItemsNow(App.admin._ordersData);
+          App.admin._startOrdersAutoRefresh();
       },{silent:true,noLoader:true});
     },
     _showOrdersError:function(msg){
       var lEl=document.getElementById('orders-loading'),eEl=document.getElementById('orders-error'),em=document.getElementById('orders-error-msg');
       if(lEl)lEl.classList.add('hidden');if(eEl)eEl.classList.remove('hidden');if(em)em.textContent=msg;
+    },
+    _preloadOrdersItemsNow:function(list){
+      var rows=Array.isArray(list)?list:[];
+      if(!rows.length)return;
+      App.admin._ensureOrdersItemsLoaded(rows,function(){
+        App.admin._ordersViewCache={key:'',data:null};
+        App.admin._renderOrders(App.admin._ordersData||rows);
+      });
     },
     _ordersVersion:'',
     _stopOrdersAutoRefresh:function(){
@@ -5704,6 +5740,7 @@ var App={
               newIds.forEach(function(id){App.admin._ordersNewFlashIds[id]=nowTs;});
             }
             App.admin._renderOrders(newData);
+            App.admin._preloadOrdersItemsNow(newData);
             if(hasNew){
         App.ui.toast('อัพเดทการรับเงินสดแล้ว','success');
               App.admin._playNewOrderSound();

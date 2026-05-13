@@ -245,7 +245,7 @@ var App={
     silent(fn,args,cb){GasAPI.call(fn,args||[]).then(cb||function(){}).catch(function(){if(cb)cb({success:false});});},
     _demo(fn,args){
       if(fn==='getMenu')return{success:true,data:DEMO_MENU};
-      if(fn==='getInitialData')return{success:true,data:{menu:DEMO_MENU,departments:DEMO_DEPTS,settings:{restaurant_name:'FoodOrder',restaurant_logo:'',payment_banks:'[]',payment_timeout:'900',cash_payment_enabled:'0',bank_payment_enabled:'1',promptpay_enabled:'1',promptpay:'0812345678'},promotions:[],version:'0'}};
+      if(fn==='getInitialData')return{success:true,data:{menu:DEMO_MENU,options:DEMO_OPTIONS,departments:DEMO_DEPTS,settings:{restaurant_name:'FoodOrder',restaurant_logo:'',payment_banks:'[]',payment_timeout:'900',cash_payment_enabled:'0',bank_payment_enabled:'1',promptpay_enabled:'1',promptpay:'0812345678'},promotions:[],paymentConfig:{promptpay:'0812345678',promptpay_enabled:true,cash_payment_enabled:false,bank_payment_enabled:true,payment_timeout:900},versions:{menu:'0',settings:'0',promotions:'0'},version:'0',menuVersion:'0',settingsVersion:'0',promoVersion:'0'}};
       if(fn==='adminCRUDMenu')return{success:true,data:args[0]==='getAll'?DEMO_MENU.items:args[1]||{}};
       if(fn==='getDepartments')return{success:true,data:DEMO_DEPTS};
       if(fn==='getPromotions')return{success:true,data:[]};
@@ -561,28 +561,73 @@ var App={
       if(hint)hint.style.display=show?'':'none';
       if(ring)ring.style.display=show?'':'none';
     },
+    _bootstrapCacheKey:'fo_customer_bootstrap_v2',
+    _normalizeBootstrapVersions:function(d){
+      d=d||{};
+      var v=d.versions||{};
+      return{
+        menu:String(v.menu||d.menuVersion||d.version||(d.menu&&d.menu.version)||'0'),
+        settings:String(v.settings||d.settingsVersion||'0'),
+        promotions:String(v.promotions||d.promoVersion||'0')
+      };
+    },
+    _clearBootstrapCache:function(){
+      try{localStorage.removeItem(App.customer._bootstrapCacheKey);}catch(_){}
+    },
+    _readBootstrapCache:function(){
+      try{
+        var raw=localStorage.getItem(App.customer._bootstrapCacheKey)||'';
+        if(!raw)return null;
+        var obj=JSON.parse(raw);
+        if(!obj||!obj.data||typeof obj.data!=='object')return null;
+        return obj;
+      }catch(_){
+        App.customer._clearBootstrapCache();
+        return null;
+      }
+    },
+    _writeBootstrapCache:function(d){
+      try{
+        localStorage.setItem(App.customer._bootstrapCacheKey,JSON.stringify({
+          ts:Date.now(),
+          versions:App.customer._normalizeBootstrapVersions(d),
+          data:d||{}
+        }));
+      }catch(_){}
+    },
+    _applyBootstrapData:function(d){
+      var s=(d&&d.settings)||{};
+      var p=(d&&d.paymentConfig)||{};
+      if(p&&typeof p==='object'){
+        s.promptpay=(p.promptpay!=null?p.promptpay:s.promptpay);
+        s.promptpay_enabled=(p.promptpay_enabled!=null?(p.promptpay_enabled?'1':'0'):s.promptpay_enabled);
+        s.cash_payment_enabled=(p.cash_payment_enabled!=null?(p.cash_payment_enabled?'1':'0'):s.cash_payment_enabled);
+        s.bank_payment_enabled=(p.bank_payment_enabled!=null?(p.bank_payment_enabled?'1':'0'):s.bank_payment_enabled);
+        s.payment_timeout=(p.payment_timeout!=null?String(p.payment_timeout):s.payment_timeout);
+      }
+      App.state.menu=(d&&d.menu&&d.menu.items)||[];
+      App.state.options=(Array.isArray(d&&d.options)?d.options:((d&&d.menu&&d.menu.options)||[]));
+      App.state.departments=Array.isArray(d&&d.departments)?d.departments:[];
+      App.state._promotions=Array.isArray(d&&d.promotions)?d.promotions:[];
+      var vers=App.customer._normalizeBootstrapVersions(d);
+      App.state._menuVersion=vers.menu;
+      App.state._settingsVersion=vers.settings;
+      App.state._promoVersion=vers.promotions;
+      App.state._menuLoaded=App.state.menu.length>0;
+      App.customer.applyInitialSettings(s||{});
+      App.customer.fillDepts();
+    },
     loadMenu(){
       var grid=document.getElementById('menu-grid');if(!grid)return;
       grid.innerHTML=App.customer.skelHtml();
       var renderMenuNow=function(){if(App.state.page==='menu')App.customer.renderMenuVirtual(App.state.menu||[]);};
       try{
-        var cachedRaw=localStorage.getItem('fo_initial_data_v1')||'';
-        if(cachedRaw){
-          var cachedObj=JSON.parse(cachedRaw);
-          if(cachedObj&&cachedObj.ts&&Date.now()-cachedObj.ts<120000&&cachedObj.data){
-            var d0=cachedObj.data||{};
-            App.state.menu=(d0.menu&&d0.menu.items)||[];
-            App.state.options=(d0.menu&&d0.menu.options)||[];
-            App.state.departments=Array.isArray(d0.departments)?d0.departments:[];
-            App.state._promotions=Array.isArray(d0.promotions)?d0.promotions:[];
-            App.state._menuVersion=String(d0.version||(d0.menu&&d0.menu.version)||'0');
-            App.state._menuLoaded=App.state.menu.length>0;
-            App.customer.applyInitialSettings(d0.settings||{});
-            App.customer.fillDepts();
-            renderMenuNow();
-          }
+        var cachedObj=App.customer._readBootstrapCache();
+        if(cachedObj&&cachedObj.data){
+          App.customer._applyBootstrapData(cachedObj.data||{});
+          renderMenuNow();
         }
-      }catch(_){}
+      }catch(_){App.customer._clearBootstrapCache();}
       App.api.call('getInitialData',[null],function(res){
         var fallback=function(){
           App.api.call('getMenu',[],function(menuRes){
@@ -602,16 +647,9 @@ var App={
         };
         if(!res||!res.success||!res.data){fallback();return;}
         var d=res.data||{};
-        App.state.menu=(d.menu&&d.menu.items)||[];
-        App.state.options=(d.menu&&d.menu.options)||[];
-        App.state.departments=Array.isArray(d.departments)?d.departments:[];
-        App.state._promotions=Array.isArray(d.promotions)?d.promotions:[];
-        App.state._menuVersion=String(d.version||(d.menu&&d.menu.version)||'0');
-        App.state._menuLoaded=true;
-        App.customer.applyInitialSettings(d.settings||{});
-        App.customer.fillDepts();
+        App.customer._applyBootstrapData(d);
         renderMenuNow();
-        try{localStorage.setItem('fo_initial_data_v1',JSON.stringify({ts:Date.now(),data:d}));}catch(_){}
+        App.customer._writeBootstrapCache(d);
       },{key:'menu'});
     },
     applyInitialSettings:function(s){
@@ -4008,8 +4046,14 @@ var App={
             done(res);
           });
         };
-        if(b64&&b64.startsWith('data:image')){doSave(b64);}
-        else{doSave(imgUrl);}
+        if(b64&&b64.startsWith('data:image')){
+          App.u.optimizeDataImage(String(b64),{maxSide:800,quality:0.84,mimeType:'image/jpeg',forceSquare:true},function(out){
+            var safeB64=(out&&String(out).indexOf('data:image')===0)?String(out):String(b64);
+            doSave(safeB64);
+          });
+        }else{
+          doSave(imgUrl);
+        }
       });
     },
     renderMenuTopicsSelector(menuId,topicIdsJson){
@@ -6422,17 +6466,6 @@ var App={
         var oidForItems=String(o&&o.id||'').trim();
         var items=Array.isArray(o.items)?o.items:[];
         var pendingItems=!!(oidForItems&&Array.isArray(App.admin._orderItemsPending[oidForItems]));
-        if(!items.length&&!o.__itemsFetchDone&&!pendingItems&&oidForItems){
-          App.admin._ensureOrderItemsLoaded(o,function(){
-            App.admin._ordersViewCache={key:'',data:null};
-            if(App.admin._ordersItemsRerenderTimer)clearTimeout(App.admin._ordersItemsRerenderTimer);
-            App.admin._ordersItemsRerenderTimer=setTimeout(function(){
-              App.admin._ordersItemsRerenderTimer=null;
-              App.admin._renderOrders(App.admin._ordersData);
-            },60);
-          });
-          pendingItems=true;
-        }
         var st=App.admin._statusUi(o.status,o);
         var isCancelled=String(o&&o.status||'').trim().toLowerCase()==='cancelled';
         var stRaw=String(o&&o.status||'').trim().toLowerCase();
@@ -6446,10 +6479,10 @@ var App={
             var extraHtml=extras.length?'<div class="order-row-extras"><span class="order-extra-label">ตัวเสริม</span><span class="order-extra-values">'+extras.map(e).join(', ')+'</span></div>':'';
             return'<div class="order-row-item"><span class="order-item-name">'+e(it.name||'?')+'</span> <strong class="order-item-qty">×'+qty+'</strong>'+(pr>0?' <span class="order-item-price">฿'+Math.round(pr*qty)+'</span>':'')+extraHtml+'</div>';
           }).join('');
-        }else if(pendingItems||!o.__itemsFetchDone){
+        }else if(pendingItems){
           itemsHtml='<div class="text-xs text-muted" style="padding:2px 0">กำลังโหลดรายการอาหาร...</div>';
         }else{
-          itemsHtml='<div class="text-xs text-muted" style="padding:2px 0">ไม่มีรายการอาหาร</div>';
+          itemsHtml='<div class="text-xs text-muted" style="padding:2px 0">ยังไม่โหลดรายละเอียด (โหลดเมื่อกดพิมพ์/ดูรายละเอียด)</div>';
         }
         var oidx=idxMap[String(o&&o.id||'')];
         if(oidx===undefined||oidx===null)oidx=-1;

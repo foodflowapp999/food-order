@@ -1,4 +1,4 @@
-﻿const GasAPI = {
+const GasAPI = {
   async call(action,payload){
     if(!window.APP_CONFIG||!window.APP_CONFIG.API_BASE_URL||/PUT_APPS_SCRIPT_WEB_APP_URL_HERE/.test(String(window.APP_CONFIG.API_BASE_URL||''))){
       throw new Error('API_BASE_URL is not configured');
